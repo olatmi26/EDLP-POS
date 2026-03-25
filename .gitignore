@@ -1,6 +1,7 @@
 *.log
 .DS_Store
 .env
+.zip
 .env.backup
 .env.production
 .phpactor.json
@@ -11,6 +12,7 @@
 /.phpunit.cache
 /.vscode
 /.zed
+/.zip
 /auth.json
 /node_modules
 /public/build
