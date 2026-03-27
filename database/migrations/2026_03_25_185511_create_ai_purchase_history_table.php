@@ -18,7 +18,6 @@ return new class extends Migration
             $table->timestamp('first_purchased_at')->nullable();
             $table->timestamp('last_purchased_at')->nullable();
             $table->timestamps();
-
             $table->unique(['customer_id', 'product_id']);
             $table->index('customer_id');
             $table->index('product_id');
