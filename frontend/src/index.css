@@ -26,22 +26,6 @@ body {
     --edlp-warning-bg: #FEF0E6;
     --edlp-info: #1A3FA6;
     --edlp-info-bg: #EAF0FB;
-    --edlp-keypad-action-border: #ffbb30;
-    --edlp-keypad-action-bg: #18223d;
-    --edlp-keypad-action-text: #ffbb30;
-    --edlp-keypad-action-hover: #2a3950;
-    --edlp-keypad-num-border: #33415c;
-    --edlp-keypad-num-bg: #1a2234;
-    --edlp-keypad-num-text: #ffffff;
-    --edlp-keypad-num-hover: #29375a;
-    --edlp-pilltab-active-from: #ffbb30;
-    --edlp-pilltab-active-to: #c98516;
-    --edlp-pilltab-active-text: #18223d;
-    --edlp-pilltab-active-border: #ffbb3066;
-    --edlp-pilltab-inactive-bg: #232c3b;
-    --edlp-pilltab-inactive-text: #ffffffcc;
-    --edlp-pilltab-inactive-hover: #2a384f;
-    --edlp-pilltab-inactive-border: #ffffff15;
     color-scheme: light;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
 }
