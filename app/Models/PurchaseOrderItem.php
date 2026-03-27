@@ -12,19 +12,17 @@ class PurchaseOrderItem extends Model
     protected $fillable = [
         'purchase_order_id',
         'product_id',
-        'product_name',
         'quantity_ordered',
         'quantity_received',
         'unit_cost',
-        'subtotal',
-        'notes',
+        'line_total',
     ];
 
     protected $casts = [
         'quantity_ordered'  => 'integer',
         'quantity_received' => 'integer',
         'unit_cost'         => 'decimal:2',
-        'subtotal'          => 'decimal:2',
+        'line_total'       => 'decimal:2',
     ];
 
     public function purchaseOrder(): \Illuminate\Database\Eloquent\Relations\BelongsTo

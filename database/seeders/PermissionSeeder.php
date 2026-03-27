@@ -157,13 +157,14 @@ class PermissionSeeder extends Seeder
         foreach (['sanctum', 'web'] as $guard) {
             $role = Role::firstOrCreate(['name' => 'branch-manager', 'guard_name' => $guard]);
             $assignPermissions($role, [
-                'products.view','products.edit','products.price_update',
-                'inventory.view','inventory.adjust','inventory.stock_take',
+                'products.view','products.create','products.edit','products.price_update','products.delete',
+                'inventory.view','inventory.adjust','inventory.transfer','inventory.stock_take',
                 'sales.view','sales.create','sales.void','sales.refund',
                 'customers.view','customers.create','customers.edit',
                 'reports.view','reports.export',
                 'expenses.view','expenses.create',
-                'purchase_orders.view','purchase_orders.create',
+                'purchase_orders.view','purchase_orders.create','purchase_orders.approve',
+                'branches.view',
             ], $guard);
         }
 
@@ -171,6 +172,7 @@ class PermissionSeeder extends Seeder
         foreach (['sanctum', 'web'] as $guard) {
             $role = Role::firstOrCreate(['name' => 'cashier', 'guard_name' => $guard]);
             $assignPermissions($role, [
+                'branches.view',
                 'products.view',
                 'inventory.view',
                 'sales.create','sales.view',

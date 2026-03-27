@@ -7,9 +7,10 @@ class PinLoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'phone'     => 'required|string',
-            'pin'       => 'required|string|digits:4',
-            'branch_id' => 'required|integer|exists:branches,id',
+            'staff_id'  => 'required|string',
+            'pin'       => 'required|string|digits_between:4,6',
+            // Branch is mapped to the user; allow auto-detection.
+            'branch_id' => 'sometimes|nullable|integer|exists:branches,id',
         ];
     }
 }

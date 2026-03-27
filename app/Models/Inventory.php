@@ -49,7 +49,8 @@ class Inventory extends Model
     public function scopeLowStock($query)
     {
         return $query->whereHas('product', function ($q) {
-            $q->whereColumn('inventory.quantity', '<=', 'products.reorder_level');
+            // Inventory table is `inventories` (plural) in our migrations.
+            $q->whereColumn('inventories.quantity', '<=', 'products.reorder_level');
         });
     }
 

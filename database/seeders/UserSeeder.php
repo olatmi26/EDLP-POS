@@ -23,6 +23,7 @@ class UserSeeder extends Seeder
                 'email'             => 'admin@edlpnigeria.com',
                 'password'          => Hash::make('Admin@12345'),
                 'phone'             => '08103051720',
+                'staff_id'         => '900021',
                 'branch_id'         => $hq?->id,
                 'is_active'         => true,
                 'pin_login_enabled' => false,
@@ -35,8 +36,10 @@ class UserSeeder extends Seeder
                 'password'          => Hash::make('Manager@12345'),
                 'phone'             => '08011111101',
                 'branch_id'         => $hq?->id,
+                'staff_id'         => '201800',
                 'is_active'         => true,
-                'pin_login_enabled' => false,
+                'pin'              => Hash::make('182026'),
+                'pin_login_enabled' => true,
                 'role'              => 'admin',
             ],
             // Branch Manager — Lekki
@@ -45,9 +48,11 @@ class UserSeeder extends Seeder
                 'email'             => 'emeka@edlpnigeria.com',
                 'password'          => Hash::make('Branch@12345'),
                 'phone'             => '08022222201',
+                'staff_id'         => '539405',
                 'branch_id'         => $lekki?->id,
                 'is_active'         => true,
-                'pin_login_enabled' => false,
+                'pin'              => Hash::make('143902'),
+                'pin_login_enabled' => true,
                 'role'              => 'branch-manager',
             ],
             // Branch Manager — VI
@@ -56,9 +61,11 @@ class UserSeeder extends Seeder
                 'email'             => 'chioma@edlpnigeria.com',
                 'password'          => Hash::make('Branch@12345'),
                 'phone'             => '08033333301',
+                'staff_id'         => '539402',
                 'branch_id'         => $vi?->id,
                 'is_active'         => true,
-                'pin_login_enabled' => false,
+                'pin'              => Hash::make('393914'),
+                'pin_login_enabled' => true,
                 'role'              => 'branch-manager',
             ],
             // Cashier — Lekki
@@ -67,7 +74,8 @@ class UserSeeder extends Seeder
                 'email'             => 'fatima@edlpnigeria.com',
                 'password'          => Hash::make('Cashier@12345'),
                 'phone'             => '08044444401',
-                'pin'               => Hash::make('123456'),
+                'staff_id'         => '444401',
+                'pin'              => Hash::make('1234'),
                 'branch_id'         => $lekki?->id,
                 'is_active'         => true,
                 'pin_login_enabled' => true,
@@ -79,7 +87,8 @@ class UserSeeder extends Seeder
                 'email'             => 'seun@edlpnigeria.com',
                 'password'          => Hash::make('Cashier@12345'),
                 'phone'             => '08055555501',
-                'pin'               => Hash::make('567890'),
+                'staff_id'         => '555501',
+                'pin'              => Hash::make('5678'),
                 'branch_id'         => $ikeja?->id,
                 'is_active'         => true,
                 'pin_login_enabled' => true,
@@ -92,6 +101,8 @@ class UserSeeder extends Seeder
             unset($data['role']);
 
             $user = User::firstOrCreate(['email' => $data['email']], $data);
+            // Ensure changes apply even if the user already exists.
+            $user->update($data);
             $user->syncRoles([$role]);
         }
 

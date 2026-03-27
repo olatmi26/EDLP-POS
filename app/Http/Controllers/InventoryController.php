@@ -28,7 +28,8 @@ class InventoryController extends Controller
             ->when($request->status === 'out', fn ($q) => $q->outOfStock())
             ->when($request->category_id, fn ($q, $id) => $q->whereHas('product', fn ($p) => $p->where('category_id', $id)))
             ->when($request->search, fn ($q, $s) => $q->whereHas('product', fn ($p) => $p->search($s)))
-            ->orderByWith('product', 'name');
+            // Keep ordering simple/portable across DB drivers.
+            ->orderBy('product_id');
 
         return $this->paginatedSuccess($query->paginate($request->get('per_page', 20)));
     }

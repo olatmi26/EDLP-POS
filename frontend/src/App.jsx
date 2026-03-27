@@ -1,35 +1,62 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
+import { useAuthStore } from './stores/authStore'
+import { AppLayout } from './ui/layouts/AppLayout'
+import { SessionBootstrap } from './ui/SessionBootstrap'
+import { StaffLoginPage } from './ui/pages/StaffLoginPage'
+import { DashboardPage } from './ui/pages/DashboardPage'
+import { ProductsPage } from './ui/pages/ProductsPage'
+import { InventoryPage } from './ui/pages/InventoryPage'
+import { SuppliersPage } from './ui/pages/SuppliersPage'
+import { PurchaseOrdersPage } from './ui/pages/PurchaseOrdersPage'
 
-function App() {
-  const [count, setCount] = useState(0)
+function Protected({ children }) {
+  const token = useAuthStore((s) => s.token)
+  const user = useAuthStore((s) => s.user)
+  const bootstrapped = useAuthStore((s) => s.bootstrapped)
 
+  if (!token) return <Navigate to="/login" replace />
+  if (!bootstrapped || !user) {
+    return (
+      <div className="flex min-h-full items-center justify-center bg-slate-50 px-4 py-10">
+        <div className="rounded border bg-white px-4 py-3 text-sm text-slate-700">
+          Loading session…
+        </div>
+      </div>
+    )
+  }
+  return children
+}
+
+export default function App() {
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>EDLP POS APPLICATION</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      <BrowserRouter>
+        <SessionBootstrap />
+        <Routes>
+          <Route path="/login" element={<StaffLoginPage initialMode="email" />} />
+          <Route path="/pin" element={<StaffLoginPage initialMode="pin" />} />
+
+          <Route
+            path="/"
+            element={
+              <Protected>
+                <AppLayout />
+              </Protected>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="products" element={<ProductsPage />} />
+            <Route path="inventory" element={<InventoryPage />} />
+            <Route path="suppliers" element={<SuppliersPage />} />
+            <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+
+      <Toaster position="top-right" />
     </>
   )
 }
-
-export default App

@@ -21,6 +21,7 @@ return new class extends Migration
             $table->decimal('selling_price', 12, 2)->default(0);
             $table->decimal('wholesale_price', 12, 2)->nullable();
             $table->decimal('vat_rate', 5, 2)->default(0);             // percentage, 0 = VAT exempt
+            $table->boolean('is_vat_exempt')->default(false);
             $table->string('unit')->default('piece');                   // piece, kg, litre, carton, etc.
             $table->decimal('unit_weight', 8, 3)->nullable();
             $table->unsignedInteger('reorder_level')->default(10);
@@ -39,7 +40,10 @@ return new class extends Migration
             $table->index('category_id');
             $table->index('supplier_id');
             $table->index('is_active');
-            $table->fullText(['name', 'sku', 'barcode']);
+            // SQLite (used in PHPUnit) does not support FULLTEXT indexes.
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                $table->fullText(['name', 'sku', 'barcode']);
+            }
         });
     }
 

@@ -12,24 +12,29 @@ class Supplier extends Model
 
     protected $fillable = [
         'name',
+        'company_name',
         'contact_person',
         'email',
         'phone',
+        'phone_alt',
         'address',
         'city',
         'state',
-        'tax_id',
-        'payment_terms',
+        'outstanding_balance',
+        'total_orders',
+        'avg_delivery_days',
+        'fill_rate',
         'notes',
         'is_active',
-        'rating',
-        'meta',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'rating'    => 'decimal:2',
-        'meta'      => 'array',
+        'outstanding_balance' => 'decimal:2',
+        // Laravel's decimal cast expects the scale only (e.g. decimal:2).
+        'avg_delivery_days'    => 'decimal:2',
+        'fill_rate'            => 'decimal:2',
+        'total_orders'         => 'integer',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────────────
@@ -63,7 +68,7 @@ class Supplier extends Model
 
         $onTime = $this->purchaseOrders()
             ->whereNotNull('received_at')
-            ->whereColumn('received_at', '<=', 'expected_at')
+            ->whereColumn('received_at', '<=', 'expected_delivery_date')
             ->count();
 
         return round(($onTime / $total) * 100, 2);

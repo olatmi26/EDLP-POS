@@ -19,7 +19,7 @@ abstract class Controller extends BaseController
             'success' => true,
             'message' => $message,
             'data'    => $data,
-        ], $status);
+        ], $status, [], JSON_PRESERVE_ZERO_FRACTION);
     }
 
     protected function created(mixed $data = null, string $message = 'Created'): JsonResponse
@@ -29,7 +29,7 @@ abstract class Controller extends BaseController
 
     protected function noContent(): JsonResponse
     {
-        return response()->json(null, 204);
+        return response()->json(null, 204, [], JSON_PRESERVE_ZERO_FRACTION);
     }
 
     protected function error(string $message, int $status = 400, mixed $errors = null): JsonResponse
@@ -43,7 +43,7 @@ abstract class Controller extends BaseController
             $payload['errors'] = $errors;
         }
 
-        return response()->json($payload, $status);
+        return response()->json($payload, $status, [], JSON_PRESERVE_ZERO_FRACTION);
     }
 
     protected function notFound(string $message = 'Resource not found'): JsonResponse
@@ -81,6 +81,6 @@ abstract class Controller extends BaseController
                 'prev'  => $paginatedData->previousPageUrl(),
                 'next'  => $paginatedData->nextPageUrl(),
             ],
-        ]);
+        ], 200, [], JSON_PRESERVE_ZERO_FRACTION);
     }
 }

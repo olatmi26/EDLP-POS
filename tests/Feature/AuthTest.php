@@ -91,16 +91,15 @@ class AuthTest extends TestCase
     {
         $branch = Branch::factory()->create();
         User::factory()->cashier()->create([
-            'phone'             => '08099999901',
+            'staff_id'         => 'STF-0000001',
             'pin'               => Hash::make('1234'),
             'pin_login_enabled' => true,
             'branch_id'         => $branch->id,
         ]);
 
         $this->postJson('/api/auth/login-pin', [
-            'phone'     => '08099999901',
+            'staff_id' => 'STF-0000001',
             'pin'       => '1234',
-            'branch_id' => $branch->id,
         ])->assertOk()
           ->assertJsonPath('success', true)
           ->assertJsonStructure(['data' => ['token', 'user']]);
@@ -110,16 +109,15 @@ class AuthTest extends TestCase
     {
         $branch = Branch::factory()->create();
         User::factory()->cashier()->create([
-            'phone'             => '08099999902',
+            'staff_id'         => 'STF-0000002',
             'pin'               => Hash::make('1234'),
             'pin_login_enabled' => true,
             'branch_id'         => $branch->id,
         ]);
 
         $this->postJson('/api/auth/login-pin', [
-            'phone'     => '08099999902',
+            'staff_id' => 'STF-0000002',
             'pin'       => '9999',
-            'branch_id' => $branch->id,
         ])->assertStatus(401);
     }
 

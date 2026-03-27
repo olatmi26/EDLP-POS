@@ -7,6 +7,7 @@ use App\Models\Inventory;
 use App\Models\InventoryTransfer;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class InventoryService
 {
@@ -115,13 +116,22 @@ class InventoryService
             throw new \RuntimeException('Insufficient stock in source branch for this transfer');
         }
 
+        // Required by schema (NOT NULL + UNIQUE).
+        $transferNumber = sprintf(
+            'TRF-%d-%s',
+            $requestedBy->id,
+            strtoupper(Str::random(10))
+        );
+
         return InventoryTransfer::create([
             'product_id'     => $data['product_id'],
             'from_branch_id' => $data['from_branch_id'],
             'to_branch_id'   => $data['to_branch_id'],
             'requested_by'   => $requestedBy->id,
-            'quantity'       => $data['quantity'],
+            'quantity_requested' => $data['quantity'],
+            'quantity_transferred' => null,
             'status'         => InventoryTransfer::STATUS_PENDING,
+            'transfer_number' => $transferNumber,
             'notes'          => $data['notes'] ?? null,
         ]);
     }
@@ -143,7 +153,7 @@ class InventoryService
                 productId: $transfer->product_id,
                 branchId:  $transfer->from_branch_id,
                 type:      'remove',
-                quantity:  $transfer->quantity,
+                quantity:  $transfer->quantity_requested,
                 notes:     "Transfer #{$transfer->id} approved",
                 user:      $approvedBy
             );
@@ -153,7 +163,7 @@ class InventoryService
                 productId: $transfer->product_id,
                 branchId:  $transfer->to_branch_id,
                 type:      'add',
-                quantity:  $transfer->quantity,
+                quantity:  $transfer->quantity_requested,
                 notes:     "Transfer #{$transfer->id} received",
                 user:      $approvedBy
             );
@@ -163,6 +173,7 @@ class InventoryService
                 'approved_by'  => $approvedBy->id,
                 'approved_at'  => now(),
                 'completed_at' => now(),
+                'quantity_transferred' => $transfer->quantity_requested,
             ]);
 
             return $transfer->fresh();

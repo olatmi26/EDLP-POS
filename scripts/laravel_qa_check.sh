@@ -75,7 +75,8 @@ find_php() {
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║      Laravel 12 / PHP 8.2 — QA Gate v1.0            ║${NC}"
-echo -e "${BOLD}║      Checking: $(basename "$ROOT")$(printf '%*s' $((38 - ${#ROOT##*/})) '')║${NC}"
+BASENAME="$(basename "$ROOT")"
+echo -e "${BOLD}║      Checking: $BASENAME$(printf '%*s' $((38 - ${#BASENAME})) '')║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════╝${NC}"
 echo -e " Root:     ${CYAN}$ROOT${NC}"
 echo -e " App:      ${CYAN}$APP${NC}"
@@ -498,8 +499,8 @@ fi
 # 6e. Single Responsibility — one public method per action (avoid multi-method controllers)
 CONTROLLER_ACTION_COUNT=0
 while IFS= read -r f; do
-  action_count=$(grep -c "public function " "$f" 2>/dev/null || echo 0)
-  if [ "$action_count" -gt 7 ]; then
+  action_count=$(grep -c "public function " "$f" 2>/dev/null | tr -d '[:space:]' || echo 0)
+  if [ "${action_count:-0}" -gt 7 ]; then
     log_warn "Controller has $action_count public methods — consider splitting: $(basename $f)"
     CONTROLLER_ACTION_COUNT=$((CONTROLLER_ACTION_COUNT+1))
   fi

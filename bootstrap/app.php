@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         api: __DIR__.'/../routes/api.php',
+        web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         apiPrefix: 'api',
@@ -16,9 +17,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Trust all proxies (needed for HTTPS on VPS behind Nginx)
         $middleware->trustProxies(at: '*');
-
-        // Sanctum stateful domains for SPA cookie auth (optional, we use tokens)
-        $middleware->statefulApi();
 
         // API middleware group
         $middleware->api(prepend: [

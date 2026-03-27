@@ -15,6 +15,7 @@ class PurchaseOrder extends Model implements HasMedia
     const STATUS_DRAFT     = 'draft';
     const STATUS_PENDING   = 'pending';
     const STATUS_APPROVED  = 'approved';
+    const STATUS_PARTIAL   = 'partial';
     const STATUS_RECEIVED  = 'received';
     const STATUS_CANCELLED = 'cancelled';
 
@@ -28,22 +29,22 @@ class PurchaseOrder extends Model implements HasMedia
         'status',
         'subtotal',
         'tax_amount',
-        'total',
-        'expected_at',
+        'total_amount',
+        'delivery_days',
+        'expected_delivery_date',
         'approved_at',
         'received_at',
         'notes',
-        'meta',
     ];
 
     protected $casts = [
         'subtotal'    => 'decimal:2',
         'tax_amount'  => 'decimal:2',
-        'total'       => 'decimal:2',
-        'expected_at' => 'datetime',
+        'total_amount' => 'decimal:2',
+        'expected_delivery_date' => 'date',
         'approved_at' => 'datetime',
         'received_at' => 'datetime',
-        'meta'        => 'array',
+        'delivery_days' => 'integer',
     ];
 
     public function registerMediaCollections(): void
@@ -94,17 +95,19 @@ class PurchaseOrder extends Model implements HasMedia
 
     public static function generatePoNumber(int $branchId): string
     {
-        $date     = now()->format('Ymd');
-        $sequence = static::whereDate('created_at', today())->count() + 1;
-        return 'PO-' . $date . '-' . str_pad($sequence, 4, '0', STR_PAD_LEFT);
+        $prefix = 'PO-' . str_pad($branchId, 2, '0', STR_PAD_LEFT);
+        $last   = static::where('po_number', 'like', $prefix . '%')
+                        ->orderByDesc('id')->value('po_number');
+        $seq    = $last ? (int) substr($last, -4) + 1 : 1;
+        return $prefix . '-' . now()->format('Ymd') . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
     }
 
     public function isOnTime(): bool
     {
-        if (! $this->received_at || ! $this->expected_at) {
+        if (! $this->received_at || ! $this->expected_delivery_date) {
             return false;
         }
 
-        return $this->received_at->lte($this->expected_at);
+        return $this->received_at->lte($this->expected_delivery_date);
     }
 }

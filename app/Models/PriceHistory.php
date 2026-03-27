@@ -9,6 +9,8 @@ class PriceHistory extends Model
 {
     use HasFactory;
 
+    protected $table = 'price_history';
+
     protected $fillable = [
         'product_id',
         'changed_by',

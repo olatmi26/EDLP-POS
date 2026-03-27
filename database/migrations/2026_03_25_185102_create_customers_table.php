@@ -35,7 +35,10 @@ return new class extends Migration
             $table->index('is_active');
             $table->index('visit_count');
             $table->index('total_spend');
-            $table->fullText(['name', 'phone']);
+            // SQLite (used in PHPUnit) does not support FULLTEXT indexes.
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                $table->fullText(['name', 'phone']);
+            }
         });
     }
 

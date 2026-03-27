@@ -20,6 +20,7 @@ class UserFactory extends Factory
             'email_verified_at'  => now(),
             'password'           => Hash::make('password'),
             'phone'              => '080' . $this->faker->numerify('########'),
+            'staff_id'           => 'STF-' . $this->faker->unique()->numerify('########'),
             'branch_id'          => Branch::factory(),
             'is_active'          => true,
             'pin_login_enabled'  => false,

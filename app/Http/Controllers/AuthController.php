@@ -9,6 +9,8 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -47,9 +49,9 @@ class AuthController extends Controller
     public function loginPin(PinLoginRequest $request): JsonResponse
     {
         $user = User::with('branch')
-            ->where('phone', $request->phone)
+            ->where('staff_id', $request->staff_id)
             ->where('pin_login_enabled', true)
-            ->where('branch_id', $request->branch_id)
+            ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->branch_id))
             ->first();
 
         if (! $user || ! Hash::check($request->pin, $user->pin)) {
@@ -76,7 +78,25 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+
+        // Revoke the exact token Sanctum matched for this request.
+        // `currentAccessToken()` can be unreliable in some test scenarios, so we
+        // resolve by bearer token string instead.
+        $bearerToken = $request->bearerToken();
+        if ($bearerToken) {
+            $personalToken = PersonalAccessToken::findToken($bearerToken);
+            if ($personalToken) {
+                $personalToken->delete();
+            } else {
+                $user->tokens()->delete();
+            }
+        } else {
+            $user->tokens()->delete();
+        }
+
+        // Clear cached guard state (helps in PHPUnit request sequences).
+        Auth::forgetGuards();
 
         return $this->success(null, 'Logged out successfully');
     }

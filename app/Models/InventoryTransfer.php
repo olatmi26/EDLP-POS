@@ -15,12 +15,14 @@ class InventoryTransfer extends Model
     const STATUS_REJECTED  = 'rejected';
 
     protected $fillable = [
+        'transfer_number',
         'product_id',
         'from_branch_id',
         'to_branch_id',
         'requested_by',
         'approved_by',
-        'quantity',
+        'quantity_requested',
+        'quantity_transferred',
         'status',
         'notes',
         'approved_at',
@@ -29,7 +31,8 @@ class InventoryTransfer extends Model
     ];
 
     protected $casts = [
-        'quantity'     => 'integer',
+        'quantity_requested'  => 'integer',
+        'quantity_transferred' => 'integer',
         'approved_at'  => 'datetime',
         'completed_at' => 'datetime',
     ];
