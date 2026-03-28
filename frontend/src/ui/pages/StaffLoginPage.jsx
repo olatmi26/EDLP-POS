@@ -10,7 +10,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { Spinner } from '../components/Spinner'
 import { AuthHeaderBar } from '../components/auth/AuthHeaderBar'
 import { AuthModeTabs } from '../components/auth/AuthModeTabs'
-import { NumericKeypad } from '../components/auth/NumericKeypad'
+import { NumericKeypad, PinDots } from '../components/auth/NumericKeypad'
 import { AuthHeroPanel, AuthSplitShell } from '../components/auth/AuthSplitShell'
 
 const emailSchema = z.object({ email: z.string().email(), password: z.string().min(6) })
@@ -20,7 +20,7 @@ function shuffledDigits() {
   const arr = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
   for (let i = arr.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
 }
@@ -29,7 +29,7 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
 
-  const [mode, setMode] = useState(initialMode) // 'email' | 'pin'
+  const [mode, setMode] = useState(initialMode)
   const [randomDigits, setRandomDigits] = useState(() => shuffledDigits())
   const [showRecovery, setShowRecovery] = useState(false)
   const [recoveryEmail, setRecoveryEmail] = useState('')
@@ -75,8 +75,7 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
   }
 
   function backspace() {
-    const current = pin ?? ''
-    pinForm.setValue('pin', current.slice(0, -1), { shouldValidate: true })
+    pinForm.setValue('pin', (pin ?? '').slice(0, -1), { shouldValidate: true })
   }
 
   function clearPin() {
@@ -89,22 +88,17 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
     setMode(nextMode)
     setShowRecovery(false)
     setRecoveryEmail('')
-    if (nextMode === 'pin') {
-      setRandomDigits(shuffledDigits())
-    }
+    if (nextMode === 'pin') setRandomDigits(shuffledDigits())
   }
 
   async function submitRecoveryEmail() {
     const email = recoveryEmail.trim()
-    if (!email) {
-      toast.error('Enter your email address')
-      return
-    }
+    if (!email) { toast.error('Enter your email address'); return }
     setRecoveryLoading(true)
     try {
       await api.post('/auth/forgot-password', { email, mode })
     } catch {
-      // Keep generic success message for security and compatibility.
+      // intentional generic success for security
     } finally {
       setRecoveryLoading(false)
       toast.success('If your account exists, reset instructions will be sent to your email.')
@@ -119,20 +113,27 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
       <div className="grid h-full min-h-0 grid-cols-1 gap-0 md:grid-cols-[1.25fr_0.75fr]">
         <AuthHeroPanel />
 
-        <div className="flex h-full min-h-0 items-center px-6 py-4 md:px-8">
-          <div className="mx-auto w-full max-w-md">
-            <div className="text-center text-2xl font-semibold text-white">
-              Staff Login
+        {/* Right panel */}
+        <div className="flex h-full min-h-0 items-center px-5 py-4 md:px-7">
+          <div className="mx-auto w-full max-w-[330px]">
+
+            <div className="text-center text-xl font-semibold tracking-wide text-white">
+              <span className="block text-center w-full">Staff Login</span>
+              <p className="text-center text-xs font-medium tracking-widest text-white/35 text-titlecase w-100">
+                Welcome back, Login to your account to continue.
+              </p>
             </div>
 
             <AuthModeTabs mode={mode} onModeChange={switchMode} />
 
-            <div className="mt-4 space-y-3">
-              <div className="relative min-h-[430px]">
+            <div className="mt-3 space-y-3">
+              <div className="relative min-h-[370px]">
+
+                {/* Email / password form */}
                 <form
                   onSubmit={emailForm.handleSubmit(submitEmail)}
                   className={[
-                    'absolute inset-0 space-y-4 transition-all duration-200',
+                    'absolute inset-0 flex flex-col justify-center gap-4 transition-all duration-200',
                     isEmailMode
                       ? 'pointer-events-auto translate-x-0 opacity-100'
                       : 'pointer-events-none translate-x-2 opacity-0',
@@ -141,27 +142,32 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
                   <input
                     {...emailForm.register('email')}
                     placeholder="Email address"
+                    autoComplete="email"
                     className="w-full rounded-xl border border-white/10 bg-white/95 px-4 py-3 text-sm outline-none focus:border-[var(--edlp-primary)]"
                   />
                   <input
                     {...emailForm.register('password')}
                     type="password"
                     placeholder="Password"
+                    autoComplete="current-password"
                     className="w-full rounded-xl border border-white/10 bg-white/95 px-4 py-3 text-sm outline-none focus:border-[var(--edlp-primary)]"
                   />
                   <button
                     disabled={emailForm.formState.isSubmitting || !isEmailMode}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[var(--edlp-primary)] to-[#c98516] py-3 text-sm font-semibold text-[var(--edlp-navy)] shadow hover:brightness-95 disabled:opacity-60"
                   >
-                    {emailForm.formState.isSubmitting && <Spinner className="text-[var(--edlp-navy)]" />}
+                    {emailForm.formState.isSubmitting && (
+                      <Spinner className="text-[var(--edlp-navy)]" />
+                    )}
                     {emailForm.formState.isSubmitting ? 'Signing in…' : 'Log In'}
                   </button>
                 </form>
 
+                {/* PIN form */}
                 <form
                   onSubmit={pinForm.handleSubmit(submitPin)}
                   className={[
-                    'absolute inset-0 space-y-4 transition-all duration-200',
+                    'absolute inset-0 space-y-2 transition-all duration-200',
                     !isEmailMode
                       ? 'pointer-events-auto translate-x-0 opacity-100'
                       : 'pointer-events-none -translate-x-2 opacity-0',
@@ -170,8 +176,16 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
                   <input
                     {...pinForm.register('staff_id')}
                     placeholder="Staff ID / Employee ID"
-                    className="w-full rounded-xl border border-white/10 bg-white/95 px-4 py-3 text-sm outline-none focus:border-[var(--edlp-primary)]"
+                    className="w-full rounded-xl border border-white/10 bg-white/95 px-4 py-3 my-6 text-sm outline-none focus:border-[var(--edlp-primary)] text-center"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    onInput={e => {
+                      const digitsOnly = e.target.value.replace(/\D/g, '');
+                      pinForm.setValue('staff_id', digitsOnly, { shouldValidate: true });
+                    }}
                   />
+
+                  {/* Hidden real PIN field driven by keypad */}
                   <input
                     {...pinForm.register('pin')}
                     value={pin}
@@ -179,11 +193,24 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
                       const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6)
                       pinForm.setValue('pin', digitsOnly, { shouldValidate: true })
                     }}
-                    inputMode="numeric"
+                    inputMode="none"
                     type="password"
-                    placeholder="4–6 Digit PIN"
-                    className="w-full rounded-xl border border-white/10 bg-white/95 px-4 py-3 text-sm outline-none focus:border-[var(--edlp-primary)]"
+                    className="sr-only py-3"
+                    aria-hidden="true"
+                    tabIndex={-1}
                   />
+
+                  {/* PIN dot indicator */}
+                  <div
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.09)',
+                      borderRadius: '10px',
+                      padding: '7px 12px',
+                    }}
+                  >
+                    <PinDots length={pin.length} maxLength={6} />
+                  </div>
 
                   <NumericKeypad
                     onDigit={addDigit}
@@ -196,15 +223,18 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
 
                   <button
                     disabled={pinForm.formState.isSubmitting || isEmailMode}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[var(--edlp-primary)] to-[#c98516] py-3 text-sm font-semibold text-[var(--edlp-navy)] shadow hover:brightness-95 disabled:opacity-60"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[var(--edlp-primary)] to-[#c98516] py-3 text-sm font-semibold text-[var(--edlp-navy)] shadow hover:brightness-95 disabled:opacity-60"
                   >
-                    {pinForm.formState.isSubmitting && <Spinner className="text-[var(--edlp-navy)]" />}
+                    {pinForm.formState.isSubmitting && (
+                      <Spinner className="text-[var(--edlp-navy)]" />
+                    )}
                     {pinForm.formState.isSubmitting ? 'Logging in…' : 'Log In'}
                   </button>
                 </form>
               </div>
 
-              <div className="pt-1 text-center text-xs text-white/70">
+              {/* Forgot link */}
+              <div className="pt-0.5 text-center text-xs text-white/70">
                 <button
                   type="button"
                   onClick={() => setShowRecovery((v) => !v)}
@@ -214,6 +244,7 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
                 </button>
               </div>
 
+              {/* Recovery panel */}
               {showRecovery && (
                 <div className="rounded-xl border border-white/12 bg-white/5 p-3">
                   <div className="mb-2 text-xs text-white/70">
@@ -231,17 +262,19 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
                       type="button"
                       onClick={submitRecoveryEmail}
                       disabled={recoveryLoading}
-                      className="flex min-w-[96px] items-center justify-center rounded-lg bg-gradient-to-b from-[var(--edlp-primary)] to-[#c98516] px-3 py-2 text-sm font-semibold text-[var(--edlp-navy)] disabled:opacity-60"
+                      className="flex min-w-[72px] items-center justify-center rounded-lg bg-gradient-to-b from-[var(--edlp-primary)] to-[#c98516] px-3 py-3 text-sm font-semibold text-[var(--edlp-navy)] disabled:opacity-60"
                     >
                       {recoveryLoading ? 'Sending…' : 'Send'}
                     </button>
                   </div>
                 </div>
               )}
-              <div className="flex items-center justify-end gap-2 pt-1 text-xs text-white/60">
-                <span>Sync Status:</span>
-                <span className="text-white/80">Online</span>
-                <span className="h-2 w-2 rounded-full bg-[var(--edlp-success)]" />
+
+              {/* Sync status */}
+              <div className="flex items-center justify-end gap-2 pt-0.5 text-xs text-white/55">
+                <span>Sync</span>
+                <span className="text-white/75">Online</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--edlp-success)]" />
               </div>
             </div>
           </div>
@@ -250,4 +283,3 @@ export function StaffLoginPage({ initialMode = 'pin' }) {
     </AuthSplitShell>
   )
 }
-

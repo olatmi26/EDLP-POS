@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore'
 import { AppLayout } from './ui/layouts/AppLayout'
 import { SessionBootstrap } from './ui/SessionBootstrap'
 import { StaffLoginPage } from './ui/pages/StaffLoginPage'
+import { StaffLoginGlassyPage } from './ui/pages/StaffLoginGlassyPage'
 import { DashboardPage } from './ui/pages/DashboardPage'
 import { ProductsPage } from './ui/pages/ProductsPage'
 import { InventoryPage } from './ui/pages/InventoryPage'
@@ -36,6 +37,10 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<StaffLoginPage initialMode="email" />} />
           <Route path="/pin" element={<StaffLoginPage initialMode="pin" />} />
+
+         
+          <Route path="/login-glass"     element={<StaffLoginGlassyPage initialMode="email" />} />
+          <Route path="/pin-glass"       element={<StaffLoginGlassyPage initialMode="pin" />} />
 
           <Route
             path="/"
