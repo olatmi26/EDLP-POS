@@ -1,28 +1,54 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './stores/authStore'
-import { AppLayout } from './ui/layouts/AppLayout'
+import { Spinner } from './ui/components/shared'
+
+// Layout
+import { AppLayout }        from './ui/layouts/AppLayout'
 import { SessionBootstrap } from './ui/SessionBootstrap'
-import { StaffLoginPage } from './ui/pages/StaffLoginPage'
+
+// Auth pages
+import { StaffLoginPage }       from './ui/pages/StaffLoginPage'
 import { StaffLoginGlassyPage } from './ui/pages/StaffLoginGlassyPage'
-import { DashboardPage } from './ui/pages/DashboardPage'
-import { ProductsPage } from './ui/pages/ProductsPage'
-import { InventoryPage } from './ui/pages/InventoryPage'
-import { SuppliersPage } from './ui/pages/SuppliersPage'
+
+// App pages
+import { DashboardPage }      from './ui/pages/DashboardPage'
+import { ProductsPage }       from './ui/pages/ProductsPage'
+import { InventoryPage }      from './ui/pages/InventoryPage'
+import { CustomersPage }      from './ui/pages/CustomersPage'
+import { SuppliersPage }      from './ui/pages/SuppliersPage'
 import { PurchaseOrdersPage } from './ui/pages/PurchaseOrdersPage'
+import { UsersPage }          from './ui/pages/UsersPage'
+import { BranchesPage }       from './ui/pages/BranchesPage'
+
+// Placeholder pages for Sprint 3+ (stubs — will be replaced)
+function ComingSoon({ title }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 12, color: '#8A9AB5', textAlign: 'center' }}>
+      <div style={{ width: 48, height: 48, borderRadius: 12, background: '#F0F4F8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🚧</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: '#1C2B3A' }}>{title}</div>
+      <div style={{ fontSize: 13 }}>Coming in the next sprint. Backend APIs are ready.</div>
+    </div>
+  )
+}
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+})
 
 function Protected({ children }) {
-  const token = useAuthStore((s) => s.token)
-  const user = useAuthStore((s) => s.user)
+  const token       = useAuthStore((s) => s.token)
+  const user        = useAuthStore((s) => s.user)
   const bootstrapped = useAuthStore((s) => s.bootstrapped)
 
   if (!token) return <Navigate to="/login" replace />
   if (!bootstrapped || !user) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-slate-50 px-4 py-10">
-        <div className="rounded border bg-white px-4 py-3 text-sm text-slate-700">
-          Loading session…
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: 10, color: '#8A9AB5', fontSize: 14 }}>
+        <Spinner size={18} color="#E8A020" /> Loading session…
       </div>
     )
   }
@@ -31,37 +57,51 @@ function Protected({ children }) {
 
 export default function App() {
   return (
-    <>
+    <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <SessionBootstrap />
         <Routes>
-          <Route path="/login" element={<StaffLoginPage initialMode="email" />} />
-          <Route path="/pin" element={<StaffLoginPage initialMode="pin" />} />
+          {/* Auth */}
+          <Route path="/login"       element={<StaffLoginPage initialMode="email" />} />
+          <Route path="/pin"         element={<StaffLoginPage initialMode="pin" />} />
+          <Route path="/login-glass" element={<StaffLoginGlassyPage initialMode="email" />} />
+          <Route path="/pin-glass"   element={<StaffLoginGlassyPage initialMode="pin" />} />
 
-         
-          <Route path="/login-glass"     element={<StaffLoginGlassyPage initialMode="email" />} />
-          <Route path="/pin-glass"       element={<StaffLoginGlassyPage initialMode="pin" />} />
+          {/* App shell */}
+          <Route path="/" element={<Protected><AppLayout /></Protected>}>
+            <Route index                  element={<DashboardPage />} />
 
-          <Route
-            path="/"
-            element={
-              <Protected>
-                <AppLayout />
-              </Protected>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="products" element={<ProductsPage />} />
-            <Route path="inventory" element={<InventoryPage />} />
-            <Route path="suppliers" element={<SuppliersPage />} />
+            {/* Operations */}
+            <Route path="pos"             element={<ComingSoon title="POS Checkout" />} />
+            <Route path="sales"           element={<ComingSoon title="Sales Reports" />} />
+            <Route path="products"        element={<ProductsPage />} />
+            <Route path="inventory"       element={<InventoryPage />} />
+            <Route path="customers"       element={<CustomersPage />} />
+            <Route path="expenses"        element={<ComingSoon title="Expense Tracking" />} />
+
+            {/* Purchasing */}
+            <Route path="suppliers"       element={<SuppliersPage />} />
             <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+
+            {/* Administration */}
+            <Route path="approvals"       element={<ComingSoon title="Approval Workflows" />} />
+            <Route path="users"           element={<UsersPage />} />
+            <Route path="branches"        element={<BranchesPage />} />
+            <Route path="settings"        element={<ComingSoon title="Settings" />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
 
-      <Toaster position="top-right" />
-    </>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: { fontSize: 13, borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' },
+          success: { iconTheme: { primary: '#1A6E3A', secondary: '#fff' } },
+          error:   { iconTheme: { primary: '#C0392B', secondary: '#fff' } },
+        }}
+      />
+    </QueryClientProvider>
   )
 }

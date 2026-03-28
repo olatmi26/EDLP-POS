@@ -1,36 +1,62 @@
 @import "tailwindcss";
-html,
-body,
-#root {
-    height: 100%;
-}
 
-body {
-    margin: 0;
-}
+html, body, #root { height: 100%; }
+body { margin: 0; }
 
 :root {
-    /* EDLP POS Theme (enterprise retail) */
-    --edlp-primary: #E8A020;
-    --edlp-navy: #0A1628;
-    --edlp-panel: #1C2B3A;
-    --edlp-bg: #F4F6FA;
-    --edlp-surface: #FFFFFF;
-    --edlp-text: #3A4A5C;
-    --edlp-muted: #8A9AB5;
-    --edlp-success: #1A6E3A;
-    --edlp-success-bg: #EAF5EE;
-    --edlp-danger: #C0392B;
-    --edlp-danger-bg: #FDECEA;
-    --edlp-warning: #C45A00;
-    --edlp-warning-bg: #FEF0E6;
-    --edlp-info: #1A3FA6;
-    --edlp-info-bg: #EAF0FB;
-    color-scheme: light;
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  /* ── EDLP Brand ── */
+  --edlp-primary:      #E8A020;
+  --edlp-primary-dark: #C98516;
+  --edlp-primary-dim:  rgba(232,160,32,0.12);
+
+  /* ── Dark surface stack (sidebar + dark pages) ── */
+  --edlp-navy:    #0A1628;
+  --edlp-panel:   #111E30;
+  --edlp-card:    #19273A;
+  --edlp-card2:   #1E2F44;
+  --edlp-border:  rgba(255,255,255,0.07);
+  --edlp-border2: rgba(255,255,255,0.12);
+
+  /* ── Light surface stack (content area) ── */
+  --edlp-bg:      #F0F4F8;
+  --edlp-surface: #FFFFFF;
+  --edlp-surface2:#F6F8FB;
+
+  /* ── Text ── */
+  --edlp-text:       #3A4A5C;
+  --edlp-text-light: #6B7A8D;
+  --edlp-muted:      #8A9AB5;
+  --edlp-white:      #FFFFFF;
+  --edlp-white60:    rgba(255,255,255,0.6);
+  --edlp-white35:    rgba(255,255,255,0.35);
+
+  /* ── Status colours ── */
+  --edlp-success:    #1A6E3A;
+  --edlp-success-bg: #EAF5EE;
+  --edlp-danger:     #C0392B;
+  --edlp-danger-bg:  #FDECEA;
+  --edlp-warning:    #C45A00;
+  --edlp-warning-bg: #FEF0E6;
+  --edlp-info:       #1A3FA6;
+  --edlp-info-bg:    #EAF0FB;
+
+  /* ── Role badge colours ── */
+  --role-super:   #1A3FA6;
+  --role-super-bg:#EAF0FB;
+  --role-admin:   #0F6E6E;
+  --role-admin-bg:#E6F5F5;
+  --role-manager: #5B3FA6;
+  --role-mgr-bg:  #F0ECFB;
+  --role-cashier: #C45A00;
+  --role-cash-bg: #FEF0E6;
+
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-body {
-    background: var(--edlp-bg);
-    color: var(--edlp-text);
-}
+body { background: var(--edlp-bg); color: var(--edlp-text); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
