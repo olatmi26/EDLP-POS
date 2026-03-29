@@ -186,7 +186,7 @@ export function AppLayout() {
             <>
               <div style={{ flex:1,overflow:'hidden' }}>
                 <div style={{ color:'#fff',fontSize:12,fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{user?.name ?? user?.email ?? 'User'}</div>
-                <div style={{ color:'var(--edlp-white35)',fontSize:10,whiteSpace:'nowrap' }}>{user?.roles?.[0] ?? 'Staff'}</div>
+                <div style={{ color:'var(--edlp-white35)',fontSize:10,whiteSpace:'nowrap' }}>{(typeof user?.roles?.[0] === 'object' ? user?.roles?.[0]?.name : user?.roles?.[0]) ?? 'Staff'}</div>
               </div>
               <button onClick={logout} title="Logout"
                 style={{ background:'none',border:'none',cursor:'pointer',color:'var(--edlp-white35)',padding:4,borderRadius:6,display:'flex',alignItems:'center' }}

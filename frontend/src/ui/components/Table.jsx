@@ -19,7 +19,7 @@ export function Table({ columns, rows, rowKey }) {
             <tr key={rowKey ? rowKey(r) : idx} className="odd:bg-slate-50/50">
               {columns.map((c) => (
                 <td key={c.key} className="border-b px-3 py-2 text-sm text-slate-800">
-                  {c.cell ? c.cell(r) : r?.[c.key]}
+                  {c.cell ? c.cell(r) : (typeof r?.[c.key] === 'object' ? '—' : r?.[c.key] ?? '—')}
                 </td>
               ))}
             </tr>

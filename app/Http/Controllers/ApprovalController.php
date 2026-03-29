@@ -207,7 +207,7 @@ class ApprovalController extends Controller
      */
     public function pendingCount(Request $request): JsonResponse
     {
-        $count = ApprovalRequest::scopeEligibleFor($request->user())->count();
+        $count = ApprovalRequest::eligibleFor($request->user())->count();
         return $this->success(['count' => $count]);
     }
 }

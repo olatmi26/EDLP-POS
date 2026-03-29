@@ -267,7 +267,7 @@ export function DataTable({
                     textAlign: col.align ?? 'left',
                     whiteSpace: col.nowrap ? 'nowrap' : undefined,
                   }}>
-                    {col.cell ? col.cell(row) : row[col.key] ?? '—'}
+                    {col.cell ? col.cell(row) : (typeof row[col.key] === 'object' ? '—' : row[col.key] ?? '—')}
                   </td>
                 ))}
               </tr>

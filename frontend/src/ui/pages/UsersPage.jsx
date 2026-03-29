@@ -227,7 +227,9 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
   }
   function openEdit(u) {
     setEditUser(u)
-    reset({ name:u.name,email:u.email,phone:u.phone??'',password:'',role:u.roles?.[0]??'cashier',branch_id:u.branch_id??null,staff_id:u.staff_id??'',pin:'',pin_login_enabled:u.pin_login_enabled??false })
+    const firstRole = u.roles?.[0]
+    const roleName = typeof firstRole === 'object' ? firstRole?.name : firstRole
+    reset({ name:u.name,email:u.email,phone:u.phone??'',password:'',role:roleName??'cashier',branch_id:u.branch_id??null,staff_id:u.staff_id??'',pin:'',pin_login_enabled:u.pin_login_enabled??false })
     setModalOpen(true)
   }
 
@@ -260,7 +262,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     return {
       total:  meta?.total ?? 0,
       active: all.filter((u) => u.is_active).length,
-      admins: all.filter((u) => (u.roles ?? []).some((r) => ['super-admin','admin'].includes(r))).length,
+      admins: all.filter((u) => (u.roles ?? []).some((r) => ['super-admin','admin'].includes(typeof r === 'object' ? r?.name : r))).length,
     }
   }, [users, meta])
 
@@ -280,7 +282,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     },
     {
       key: 'role', header: 'Role',
-      render: (u) => (u.roles ?? []).map((r) => <RolePill key={r} name={r} />),
+      render: (u) => (u.roles ?? []).map((r) => { const rName = typeof r === 'object' ? r?.name : r; return <RolePill key={rName} name={rName} /> }),
     },
     {
       key: 'branch', header: 'Branch',
@@ -502,7 +504,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
                 <div style={{ fontWeight:700,color:'#1C2B3A',fontSize:14 }}>{viewUser.name}</div>
                 <div style={{ fontSize:12,color:'#8A9AB5',marginTop:2 }}>{viewUser.email}</div>
                 <div style={{ display:'flex',gap:6,marginTop:6,flexWrap:'wrap' }}>
-                  {(viewUser.roles??[]).map((r)=><RolePill key={r} name={r}/>)}
+                  {(viewUser.roles??[]).map((r)=>{ const rName = typeof r === 'object' ? r?.name : r; return <RolePill key={rName} name={rName}/> })}
                 </div>
               </div>
             </div>
