@@ -17,33 +17,35 @@ class ProductController extends Controller
 
     /**
      * GET /api/products
-     * Now eager-loads inventory for the request branch so stock level shows in the product list.
-     * Admins, Super Admins, and CEOs see all inventory per product (all branches).
+     * Returns paginated product list.
+     * When a branch_id is present on the request (injected by BranchScope middleware),
+     * we eager-load inventory scoped to that branch so stock levels appear on the
+     * Products Catalog page.  When branch_id is null (super-admin viewing all), we
+     * still load all inventory rows so the frontend can sum / display them.
      */
     public function index(Request $request): JsonResponse
     {
-        $user     = $request->user();
-        $branchId = $request->branch_id;
-
-        // Identify admin, super-admin, or ceo user roles
-        $elevated = $user && ($user->hasRole('super-admin') || $user->hasRole('admin') || $user->hasRole('ceo'));
+        $branchId = $request->branch_id; // set by BranchScope middleware
 
         $query = Product::with([
                 'category',
                 'supplier',
-                // For elevated users, load all inventory; others, load inventory for the user's branch
-                'inventory' => function ($q) use ($branchId, $elevated) {
-                    if ($elevated) {
-                        return $q;
+                'inventory' => function ($q) use ($branchId) {
+                    if ($branchId) {
+                        $q->where('branch_id', $branchId);
                     }
-                    return $branchId ? $q->where('branch_id', (int) $branchId) : $q;
                 },
             ])
-            ->when($request->search,       fn ($q, $s)  => $q->search($s))
-            ->when($request->category_id,  fn ($q, $id) => $q->forCategory((int) $id))
-            ->when($request->supplier_id,  fn ($q, $id) => $q->forSupplier((int) $id))
-            ->when($request->filled('is_active'), fn ($q) => $q->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN)))
-            ->when(! $request->filled('is_active'), fn ($q) => $q->active())
+            ->when($request->search, fn ($q, $s) => $q->search($s))
+            ->when($request->category_id, fn ($q, $id) => $q->forCategory((int) $id))
+            ->when($request->supplier_id, fn ($q, $id) => $q->forSupplier((int) $id))
+            ->when(
+                $request->has('active_only'),
+                fn ($q) => $request->boolean('active_only')
+                    ? $q->active()
+                    : $q,
+                fn ($q) => $q->active()   // default: only active products
+            )
             ->orderBy('name');
 
         if ($request->boolean('all')) {
@@ -54,25 +56,19 @@ class ProductController extends Controller
     }
 
     /**
-     * GET /api/products/search — POS barcode/text search with branch stock.
-     * Admins, Super Admins, and CEOs see all inventory per found product.
+     * GET /api/products/search
+     * Optimised POS barcode/text search — always returns branch-scoped stock.
      */
     public function search(Request $request): JsonResponse
     {
         $request->validate(['q' => 'required|string|min:1']);
-        $user     = $request->user();
+
         $branchId = $request->branch_id;
-        $elevated = $user && ($user->hasRole('super-admin') || $user->hasRole('admin') || $user->hasRole('ceo'));
 
         $products = Product::with([
-                'category',
-                'inventory' => function ($q) use ($branchId, $elevated) {
-                    if ($elevated) {
-                        return $q;
-                    }
-                    return $q->where('branch_id', (int) $branchId);
-                },
-            ])
+            'category',
+            'inventory' => fn ($q) => $q->where('branch_id', $branchId),
+        ])
             ->active()
             ->search($request->q)
             ->limit(20)
@@ -81,70 +77,111 @@ class ProductController extends Controller
         return $this->success(ProductResource::collection($products));
     }
 
-    /** POST /api/products */
+    /**
+     * POST /api/products
+     */
     public function store(StoreProductRequest $request): JsonResponse
     {
         $product = $this->productService->create($request->validated());
-        return $this->created(new ProductResource($product->load('category', 'supplier')), 'Product created');
+
+        return $this->created(
+            new ProductResource($product->load('category', 'supplier')),
+            'Product created'
+        );
     }
 
-    /** GET /api/products/{product} */
-    public function show(Request $request, Product $product): JsonResponse
+    /**
+     * GET /api/products/{product}
+     */
+    public function show(Product $product): JsonResponse
     {
-        $user     = $request->user();
-        $branchId = $request->branch_id;
-        $elevated = $user && ($user->hasRole('super-admin') || $user->hasRole('admin') || $user->hasRole('ceo'));
-
         $product->load([
-            'category', 'supplier', 'media',
-            'inventory' => function($q) use ($branchId, $elevated) {
-                if ($elevated) {
-                    return $q;
-                }
-                return $branchId ? $q->where('branch_id', (int) $branchId) : $q;
-            },
+            'category',
+            'supplier',
+            'media',
+            'inventory',
             'priceHistory' => fn ($q) => $q->latest()->limit(10),
         ]);
+
         return $this->success(new ProductResource($product));
     }
 
-    /** PUT /api/products/{product} */
+    /**
+     * PUT /api/products/{product}
+     */
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
     {
         $product = $this->productService->update($product, $request->validated(), $request->user());
-        return $this->success(new ProductResource($product->load('category', 'supplier')), 'Product updated');
+
+        return $this->success(
+            new ProductResource($product->load('category', 'supplier')),
+            'Product updated'
+        );
     }
 
-    /** DELETE /api/products/{product} */
+    /**
+     * DELETE /api/products/{product}
+     */
     public function destroy(Product $product): JsonResponse
     {
         if ($product->saleItems()->exists()) {
-            return $this->error('Cannot delete a product with sales history. Deactivate it instead.', 422);
+            return $this->error(
+                'Cannot delete a product with sales history. Deactivate it instead.',
+                422
+            );
         }
+
         $product->delete();
+
         return $this->success(null, 'Product deleted');
     }
 
-    /** POST /api/products/bulk-price-update */
+    /**
+     * POST /api/products/bulk-price-update
+     */
     public function bulkPriceUpdate(BulkPriceUpdateRequest $request): JsonResponse
     {
-        $updated = $this->productService->bulkPriceUpdate($request->validated(), $request->user());
-        return $this->success(['updated_count' => $updated], "Updated {$updated} product prices");
+        $updated = $this->productService->bulkPriceUpdate(
+            $request->validated(),
+            $request->user()
+        );
+
+        return $this->success(
+            ['updated_count' => $updated],
+            "Updated {$updated} product prices"
+        );
     }
 
-    /** POST /api/products/import */
+    /**
+     * POST /api/products/import
+     */
     public function import(Request $request): JsonResponse
     {
         $request->validate(['file' => 'required|file|mimes:csv,txt|max:5120']);
-        $result = $this->productService->importFromCsv($request->file('file'), $request->user());
-        return $this->success($result, "Import complete: {$result['imported']} products, {$result['skipped']} skipped");
+
+        $result = $this->productService->importFromCsv(
+            $request->file('file'),
+            $request->user()
+        );
+
+        return $this->success(
+            $result,
+            "Import complete: {$result['imported']} products, {$result['skipped']} skipped"
+        );
     }
 
-    /** POST /api/products/{product}/image */
+    /**
+     * POST /api/products/{product}/image
+     */
     public function uploadImage(Request $request, Product $product): JsonResponse
     {
         $request->validate(['image' => 'required|image|max:2048']);
+
         $product->addMediaFromRequest('image')->toMediaCollection('images');
-        return $this->success(['thumbnail_url' => $product->getFirstMediaUrl('images')], 'Image uploaded');
+
+        return $this->success(
+            ['thumbnail_url' => $product->getFirstMediaUrl('images')],
+            'Image uploaded'
+        );
     }
 }

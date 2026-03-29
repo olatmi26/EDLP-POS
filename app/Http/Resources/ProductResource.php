@@ -9,6 +9,40 @@ class ProductResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        // When inventory is eager-loaded, compute totals across all loaded rows.
+        // The controller may scope inventory to one branch (for POS/cashier),
+        // or load all branches (for super-admin catalog view).
+        $inventoryLoaded = $this->relationLoaded('inventory');
+        $inventoryRows   = $inventoryLoaded ? $this->inventory : collect();
+
+        $totalStock    = $inventoryRows->sum('quantity');
+        $branchStocks  = $inventoryRows->map(fn ($inv) => [
+            'branch_id'         => $inv->branch_id,
+            'quantity'          => $inv->quantity,
+            'reserved_quantity' => $inv->reserved_quantity ?? 0,
+            'status'            => $inv->status,
+        ])->values();
+
+        // Determine aggregate stock status
+        $stockStatus = 'unknown';
+        if ($inventoryLoaded) {
+            $lowCount = $inventoryRows->filter(
+                fn ($inv) => $inv->quantity > 0 && $inv->quantity <= ($this->reorder_level ?? 0)
+            )->count();
+            $outCount = $inventoryRows->filter(fn ($inv) => $inv->quantity <= 0)->count();
+            $total    = $inventoryRows->count();
+
+            if ($total === 0) {
+                $stockStatus = 'unknown';
+            } elseif ($outCount === $total) {
+                $stockStatus = 'out';
+            } elseif ($lowCount > 0) {
+                $stockStatus = 'low';
+            } else {
+                $stockStatus = 'ok';
+            }
+        }
+
         return [
             'id'             => $this->id,
             'name'           => $this->name,
@@ -25,18 +59,24 @@ class ProductResource extends JsonResource
             'thumbnail_url'  => $this->thumbnail_url,
             'category_id'    => $this->category_id,
             'supplier_id'    => $this->supplier_id,
-            'category'       => $this->whenLoaded('category', fn () => [
+
+            // Relationships
+            'category' => $this->whenLoaded('category', fn () => [
                 'id'   => $this->category->id,
                 'name' => $this->category->name,
             ]),
-            'supplier'       => $this->whenLoaded('supplier', fn () => [
+            'supplier' => $this->whenLoaded('supplier', fn () => [
                 'id'   => $this->supplier->id,
                 'name' => $this->supplier->name,
             ]),
-            // Stock for a specific branch (only present when inventory eager-loaded for that branch)
-            'stock'          => $this->whenLoaded('inventory', fn () => $this->inventory->first()?->quantity ?? 0),
-            'stock_status'   => $this->whenLoaded('inventory', fn () => $this->inventory->first()?->status ?? 'unknown'),
-            'price_history'  => $this->whenLoaded('priceHistory', fn () =>
+
+            // Inventory — aggregated totals + per-branch breakdown
+            'stock'         => $inventoryLoaded ? $totalStock        : null,
+            'stock_status'  => $inventoryLoaded ? $stockStatus       : null,
+            'branch_stocks' => $inventoryLoaded ? $branchStocks      : null,
+
+            // Price history (detail view only)
+            'price_history' => $this->whenLoaded('priceHistory', fn () =>
                 $this->priceHistory->map(fn ($h) => [
                     'old_price'  => (float) $h->old_price,
                     'new_price'  => (float) $h->new_price,
@@ -45,8 +85,9 @@ class ProductResource extends JsonResource
                     'date'       => $h->effective_at?->toISOString(),
                 ])
             ),
-            'created_at'     => $this->created_at?->toISOString(),
-            'updated_at'     => $this->updated_at?->toISOString(),
+
+            'created_at' => $this->created_at?->toISOString(),
+            'updated_at' => $this->updated_at?->toISOString(),
         ];
     }
 }

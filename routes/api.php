@@ -6,15 +6,13 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\InventoryController;
-use App\Http\Controllers\ProductBatchController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PromotionController;
 use App\Http\Controllers\PurchaseOrderController;
-use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WholesaleController;
-use App\Http\Middleware\BranchScope;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -27,21 +25,21 @@ use Illuminate\Support\Facades\Route;
 
 // ── Public routes (no auth required) ─────────────────────────────────────────
 Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login',     [AuthController::class, 'login']);
     Route::post('/login-pin', [AuthController::class, 'loginPin']);
 });
 
 // ── Authenticated routes ──────────────────────────────────────────────────────
-Route::middleware(['auth:sanctum', BranchScope::class])->group(function () {
+Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->group(function () {
 
     Route::prefix('auth')->group(function () {
-        Route::delete('/logout', [AuthController::class, 'logout']);
+        Route::delete('/logout',      [AuthController::class, 'logout']);
         Route::post('/switch-branch', [AuthController::class, 'switchBranch']);
     });
 
     Route::get('/me', [AuthController::class, 'me']);
 
-    // Branches
+    // ── Branches ──────────────────────────────────────────────────────────────
     Route::get('branches', [BranchController::class, 'index'])
         ->middleware('permission:branches.view');
     Route::post('branches', [BranchController::class, 'store'])
@@ -57,7 +55,7 @@ Route::middleware(['auth:sanctum', BranchScope::class])->group(function () {
     Route::get('branches/{branch}/stats', [BranchController::class, 'stats'])
         ->middleware('permission:branches.view');
 
-    // Products
+    // ── Products ──────────────────────────────────────────────────────────────
     Route::get('products/search', [ProductController::class, 'search'])
         ->middleware('permission:products.view');
     Route::post('products/bulk-price-update', [ProductController::class, 'bulkPriceUpdate'])
@@ -80,7 +78,7 @@ Route::middleware(['auth:sanctum', BranchScope::class])->group(function () {
     Route::delete('products/{product}', [ProductController::class, 'destroy'])
         ->middleware('permission:products.delete');
 
-    // Inventory
+    // ── Inventory ─────────────────────────────────────────────────────────────
     Route::get('inventory', [InventoryController::class, 'index'])
         ->middleware('permission:inventory.view');
     Route::get('inventory/low-stock', [InventoryController::class, 'lowStock'])
@@ -96,19 +94,28 @@ Route::middleware(['auth:sanctum', BranchScope::class])->group(function () {
     Route::patch('inventory/transfers/{transfer}/approve', [InventoryController::class, 'approveTransfer'])
         ->middleware('permission:inventory.approve');
 
-    // Customers
-    Route::post('customers/merge', [CustomerController::class, 'merge']);
-    Route::get('customers/{customer}/suggestions', [CustomerController::class, 'suggestions']);
+    // ── Customers ─────────────────────────────────────────────────────────────
+    Route::post('customers/merge',                      [CustomerController::class, 'merge']);
+    Route::get('customers/{customer}/suggestions',      [CustomerController::class, 'suggestions']);
     Route::get('customers/{customer}/purchase-history', [CustomerController::class, 'purchaseHistory']);
     Route::apiResource('customers', CustomerController::class);
 
-    // Users
-    Route::post('users/{user}/avatar', [UserController::class, 'uploadAvatar']);
+    // ── Users ─────────────────────────────────────────────────────────────────
+    Route::post('users/{user}/avatar',         [UserController::class, 'uploadAvatar']);
     Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword']);
     Route::patch('users/{user}/toggle-active', [UserController::class, 'toggleActive']);
     Route::apiResource('users', UserController::class);
 
-    // Suppliers & Purchase Orders (Sprint 2)
+    // ── Roles & Permissions ───────────────────────────────────────────────────
+    // Read: admin or super-admin; Write (sync): super-admin only (enforced in controller)
+    Route::middleware('role:super-admin|admin')->group(function () {
+        Route::get('roles',                              [RolePermissionController::class, 'index']);
+        Route::get('roles/{role}/permissions',           [RolePermissionController::class, 'rolePermissions']);
+        Route::put('roles/{role}/permissions',           [RolePermissionController::class, 'syncRolePermissions']);
+        Route::get('permissions',                        [RolePermissionController::class, 'allPermissions']);
+    });
+
+    // ── Suppliers & Purchase Orders ───────────────────────────────────────────
     Route::get('suppliers', [SupplierController::class, 'index'])
         ->middleware('permission:purchase_orders.view');
     Route::post('suppliers', [SupplierController::class, 'store'])
@@ -133,37 +140,37 @@ Route::middleware(['auth:sanctum', BranchScope::class])->group(function () {
     Route::patch('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])
         ->middleware('permission:purchase_orders.approve');
 
-    // ── Approvals ─────────────────────────────────────────────────────────────────
+    // ── Approvals ─────────────────────────────────────────────────────────────
     Route::prefix('approvals')->group(function () {
-        Route::get('inbox', [ApprovalController::class, 'inbox']);
-        Route::get('history', [ApprovalController::class, 'history']);
+        Route::get('inbox',         [ApprovalController::class, 'inbox']);
+        Route::get('history',       [ApprovalController::class, 'history']);
         Route::get('pending-count', [ApprovalController::class, 'pendingCount']);
-        Route::get('{approvalRequest}', [ApprovalController::class, 'show']);
-        Route::post('{approvalRequest}/decide', [ApprovalController::class, 'decide']);
-        Route::delete('{approvalRequest}/cancel', [ApprovalController::class, 'cancel']);
+        Route::get('{approvalRequest}',          [ApprovalController::class, 'show']);
+        Route::post('{approvalRequest}/decide',  [ApprovalController::class, 'decide']);
+        Route::delete('{approvalRequest}/cancel',[ApprovalController::class, 'cancel']);
     });
 
-    // ── Approval Workflow Configuration (Super Admin) ──────────────────────────────
+    // ── Approval Workflow Configuration (Super Admin / Admin) ─────────────────
     Route::prefix('approval-workflows')->middleware('role:super-admin|admin')->group(function () {
-        Route::get('/', [ApprovalController::class, 'workflowIndex']);
-        Route::post('/', [ApprovalController::class, 'workflowStore']);
+        Route::get('/',                  [ApprovalController::class, 'workflowIndex']);
+        Route::post('/',                 [ApprovalController::class, 'workflowStore']);
         Route::put('{approvalWorkflow}', [ApprovalController::class, 'workflowUpdate']);
     });
 
-    // ── Promotions ────────────────────────────────────────────────────────────────
+    // ── Promotions ────────────────────────────────────────────────────────────
     Route::prefix('promotions')->group(function () {
         Route::get('active', [PromotionController::class, 'active']);
-        Route::get('/', [PromotionController::class, 'index'])
+        Route::get('/',      [PromotionController::class, 'index'])
             ->middleware('permission:products.view');
-        Route::post('/', [PromotionController::class, 'store'])
+        Route::post('/',     [PromotionController::class, 'store'])
             ->middleware('permission:products.edit');
-        Route::get('{promotion}', [PromotionController::class, 'show'])
+        Route::get('{promotion}',            [PromotionController::class, 'show'])
             ->middleware('permission:products.view');
-        Route::put('{promotion}', [PromotionController::class, 'update'])
+        Route::put('{promotion}',            [PromotionController::class, 'update'])
             ->middleware('permission:products.edit');
-        Route::delete('{promotion}', [PromotionController::class, 'destroy'])
+        Route::delete('{promotion}',         [PromotionController::class, 'destroy'])
             ->middleware('permission:products.edit');
-        Route::patch('{promotion}/pause', [PromotionController::class, 'pause'])
+        Route::patch('{promotion}/pause',    [PromotionController::class, 'pause'])
             ->middleware('permission:products.edit');
         Route::patch('{promotion}/activate', [PromotionController::class, 'activate'])
             ->middleware('permission:products.edit');
@@ -171,79 +178,49 @@ Route::middleware(['auth:sanctum', BranchScope::class])->group(function () {
             ->middleware('permission:products.edit');
     });
 
-    // ── Wholesale / B2B ───────────────────────────────────────────────────────────
+    // ── Wholesale / B2B ───────────────────────────────────────────────────────
     Route::prefix('wholesale')->middleware('permission:sales.b2b')->group(function () {
-        Route::apiResource('customers', WholesaleController::class . '@b2bCustomers', ['as' => 'wholesale.customers']);
-        Route::get('customers', [WholesaleController::class, 'customerIndex']);
-        Route::post('customers', [WholesaleController::class, 'customerStore']);
-        Route::get('customers/{b2bCustomer}', [WholesaleController::class, 'customerShow']);
-        Route::put('customers/{b2bCustomer}', [WholesaleController::class, 'customerUpdate']);
+        Route::get('customers',                         [WholesaleController::class, 'customerIndex']);
+        Route::post('customers',                        [WholesaleController::class, 'customerStore']);
+        Route::get('customers/{b2bCustomer}',           [WholesaleController::class, 'customerShow']);
+        Route::put('customers/{b2bCustomer}',           [WholesaleController::class, 'customerUpdate']);
         Route::post('customers/{b2bCustomer}/payments', [WholesaleController::class, 'recordPayment']);
 
-        Route::get('orders', [WholesaleController::class, 'orderIndex']);
-        Route::post('orders', [WholesaleController::class, 'orderStore']);
-        Route::get('orders/{wholesaleOrder}', [WholesaleController::class, 'orderShow']);
+        Route::get('orders',                            [WholesaleController::class, 'orderIndex']);
+        Route::post('orders',                           [WholesaleController::class, 'orderStore']);
+        Route::get('orders/{wholesaleOrder}',           [WholesaleController::class, 'orderShow']);
         Route::patch('orders/{wholesaleOrder}/advance', [WholesaleController::class, 'advanceStatus']);
-        Route::get('price-tiers', [WholesaleController::class, 'priceTiers']);
-        Route::post('price-tiers', [WholesaleController::class, 'updatePriceTiers'])
+        Route::get('price-tiers',                       [WholesaleController::class, 'priceTiers']);
+        Route::post('price-tiers',                      [WholesaleController::class, 'updatePriceTiers'])
             ->middleware('permission:products.price_update');
-        Route::get('reports/aged-debt', [WholesaleController::class, 'agedDebtReport']);
+        Route::get('reports/aged-debt',                 [WholesaleController::class, 'agedDebtReport']);
     });
 
-    // ── Product Batches & Expiry (FEFO) ───────────────────────────────────────────
-    Route::prefix('batches')->middleware('permission:inventory.view')->group(function () {
-        Route::get('/', [ProductBatchController::class, 'index']);
-        Route::post('/', [ProductBatchController::class, 'store'])
-            ->middleware('permission:inventory.adjust');
-        Route::get('{productBatch}', [ProductBatchController::class, 'show']);
-        Route::get('product/{productId}/active', [ProductBatchController::class, 'activeBatch']);
-        Route::get('near-expiry', [ProductBatchController::class, 'nearExpiry']);
-        Route::post('disposals', [ProductBatchController::class, 'requestDisposal'])
-            ->middleware('permission:inventory.adjust');
-        Route::get('disposals', [ProductBatchController::class, 'disposalIndex']);
-    });
-
-    // ── Stock Movements ───────────────────────────────────────────────────────────
-    Route::prefix('stock-movements')->group(function () {
-        Route::get('/', [StockMovementController::class, 'index'])
-            ->middleware('permission:inventory.view');
-        Route::post('/', [StockMovementController::class, 'store']); // Any authenticated user
-        Route::get('{stockMovement}', [StockMovementController::class, 'show'])
-            ->middleware('permission:inventory.view');
-        Route::get('reports/shrinkage', [StockMovementController::class, 'shrinkageReport'])
-            ->middleware('permission:reports.view');
-    });
-
+    // ── Accounting ────────────────────────────────────────────────────────────
     Route::prefix('accounting')->middleware('permission:accounting.view')->group(function () {
-
-        // Chart of Accounts
-        Route::get('accounts', [AccountingController::class, 'accountIndex']);
-        Route::post('accounts', [AccountingController::class, 'accountStore'])
+        Route::get('accounts',              [AccountingController::class, 'accountIndex']);
+        Route::post('accounts',             [AccountingController::class, 'accountStore'])
             ->middleware('permission:accounting.ledger');
-        Route::put('accounts/{account}', [AccountingController::class, 'accountUpdate'])
+        Route::put('accounts/{account}',    [AccountingController::class, 'accountUpdate'])
             ->middleware('permission:accounting.ledger');
 
-        // Journal Entries / Vouchers
-        Route::get('journal-entries', [AccountingController::class, 'journalIndex']);
+        Route::get('journal-entries',       [AccountingController::class, 'journalIndex']);
         Route::get('journal-entries/{journalEntry}', [AccountingController::class, 'journalShow']);
         Route::post('journal-entries/{journalEntry}/reverse', [AccountingController::class, 'journalReverse'])
             ->middleware('permission:accounting.journal');
 
-        // Trial Balance
-        Route::get('trial-balance', [AccountingController::class, 'trialBalance']);
+        Route::get('trial-balance',         [AccountingController::class, 'trialBalance']);
 
-        // Payment Queue (payable accountant workflow)
-        Route::get('payment-queue', [AccountingController::class, 'paymentQueue']);
+        Route::get('payment-queue',         [AccountingController::class, 'paymentQueue']);
         Route::post('payment-queue/{approvalRequest}/confirm', [AccountingController::class, 'confirmPayment'])
             ->middleware('permission:accounting.make_payment');
 
-        // eTax / FIRS Compliance
-        Route::get('etax/config/{branchId}', [AccountingController::class, 'etaxConfig']);
-        Route::post('etax/config/{branchId}', [AccountingController::class, 'etaxConfigUpdate'])
+        Route::get('etax/config/{branchId}',    [AccountingController::class, 'etaxConfig']);
+        Route::post('etax/config/{branchId}',   [AccountingController::class, 'etaxConfigUpdate'])
             ->middleware('permission:settings.edit');
-        Route::get('etax/submissions', [AccountingController::class, 'etaxSubmissions']);
-        Route::post('etax/retry/{branchId}', [AccountingController::class, 'etaxRetry']);
-        Route::get('etax/verify/{fdn}', [AccountingController::class, 'etaxVerify']);
+        Route::get('etax/submissions',           [AccountingController::class, 'etaxSubmissions']);
+        Route::post('etax/retry/{branchId}',    [AccountingController::class, 'etaxRetry']);
+        Route::get('etax/verify/{fdn}',         [AccountingController::class, 'etaxVerify']);
     });
 
-});
+}); // end auth:sanctum
