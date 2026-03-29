@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Services;
 
 use App\Models\EtaxConfig;
@@ -26,9 +25,15 @@ use Illuminate\Support\Facades\Log;
  */
 class EtaxService
 {
-    private const SANDBOX_URL    = 'https://etax.firs.gov.ng/api/sandbox/v1';
-    private const PRODUCTION_URL = 'https://etax.firs.gov.ng/api/v1';
-    private const TIMEOUT        = 10; // seconds — never hold up the cashier
+    private function sandboxUrl(): string
+    {
+        return config('services.firs.sandbox_url', 'https://etax.firs.gov.ng/api/sandbox/v1');
+    }
+    private function productionUrl(): string
+    {
+        return config('services.firs.production_url', 'https://etax.firs.gov.ng/api/v1');
+    }
+    private const TIMEOUT = 10; // seconds — never hold up the cashier
 
     /**
      * Submit a retail sale receipt to FIRS.
@@ -48,16 +53,16 @@ class EtaxService
         $payload = $this->buildSalePayload($sale, $config);
 
         return $this->submitDocument(
-            branchId:       $sale->branch_id,
-            config:         $config,
-            sourceType:     'sale',
-            sourceId:       $sale->id,
-            documentType:   'receipt',
+            branchId: $sale->branch_id,
+            config: $config,
+            sourceType: 'sale',
+            sourceId: $sale->id,
+            documentType: 'receipt',
             documentNumber: $sale->receipt_number,
-            taxableAmount:  (float)$sale->subtotal,
-            vatAmount:      (float)$sale->vat_amount,
-            totalAmount:    (float)$sale->total,
-            payload:        $payload,
+            taxableAmount: (float) $sale->subtotal,
+            vatAmount: (float) $sale->vat_amount,
+            totalAmount: (float) $sale->total,
+            payload: $payload,
         );
     }
 
@@ -77,16 +82,16 @@ class EtaxService
         $payload = $this->buildWholesalePayload($order, $config);
 
         return $this->submitDocument(
-            branchId:       $order->branch_id,
-            config:         $config,
-            sourceType:     'wholesale_order',
-            sourceId:       $order->id,
-            documentType:   'invoice',
+            branchId: $order->branch_id,
+            config: $config,
+            sourceType: 'wholesale_order',
+            sourceId: $order->id,
+            documentType: 'invoice',
             documentNumber: $order->order_number,
-            taxableAmount:  (float)$order->subtotal,
-            vatAmount:      (float)$order->tax_amount,
-            totalAmount:    (float)$order->total,
-            payload:        $payload,
+            taxableAmount: (float) $order->subtotal,
+            vatAmount: (float) $order->tax_amount,
+            totalAmount: (float) $order->total,
+            payload: $payload,
         );
     }
 
@@ -102,7 +107,9 @@ class EtaxService
             ->get()
             ->each(function (EtaxSubmission $submission) use (&$retried) {
                 $config = $this->getConfig($submission->branch_id);
-                if (! $config) return;
+                if (! $config) {
+                    return;
+                }
 
                 $this->transmit($submission, $config);
                 $retried++;
@@ -117,7 +124,9 @@ class EtaxService
     public function verifyFDN(string $fdn, int $branchId): array
     {
         $config = $this->getConfig($branchId);
-        if (! $config) return ['valid' => false, 'message' => 'eTax not configured for this branch'];
+        if (! $config) {
+            return ['valid' => false, 'message' => 'eTax not configured for this branch'];
+        }
 
         try {
             $response = Http::withHeaders($this->headers($config))
@@ -133,29 +142,29 @@ class EtaxService
     // ── Private ────────────────────────────────────────────────────────────────
 
     private function submitDocument(
-        int    $branchId,
+        int $branchId,
         EtaxConfig $config,
         string $sourceType,
-        int    $sourceId,
+        int $sourceId,
         string $documentType,
         string $documentNumber,
-        float  $taxableAmount,
-        float  $vatAmount,
-        float  $totalAmount,
-        array  $payload,
+        float $taxableAmount,
+        float $vatAmount,
+        float $totalAmount,
+        array $payload,
     ): EtaxSubmission {
 
         $submission = EtaxSubmission::create([
-            'branch_id'        => $branchId,
-            'source_type'      => $sourceType,
-            'source_id'        => $sourceId,
-            'document_type'    => $documentType,
-            'document_number'  => $documentNumber,
-            'submission_status'=> EtaxSubmission::STATUS_PENDING,
-            'request_payload'  => $payload,
-            'taxable_amount'   => $taxableAmount,
-            'vat_amount'       => $vatAmount,
-            'total_amount'     => $totalAmount,
+            'branch_id'         => $branchId,
+            'source_type'       => $sourceType,
+            'source_id'         => $sourceId,
+            'document_type'     => $documentType,
+            'document_number'   => $documentNumber,
+            'submission_status' => EtaxSubmission::STATUS_PENDING,
+            'request_payload'   => $payload,
+            'taxable_amount'    => $taxableAmount,
+            'vat_amount'        => $vatAmount,
+            'total_amount'      => $totalAmount,
         ]);
 
         $this->transmit($submission, $config);
@@ -192,7 +201,7 @@ class EtaxService
                     'submission_status' => EtaxSubmission::STATUS_REJECTED,
                     'response_payload'  => $responseBody,
                     'error_message'     => $responseBody['message'] ?? "HTTP {$response->status()}",
-                    'retry_count'       => $submission->retry_count + 1,
+                    'retry_count' => $submission->retry_count + 1,
                 ]);
 
                 Log::warning("EtaxService: Submission rejected for {$submission->document_number}: " . ($responseBody['message'] ?? 'unknown'));
@@ -209,44 +218,44 @@ class EtaxService
 
     private function buildSalePayload(Sale $sale, EtaxConfig $config): array
     {
-        $lineItems = $sale->items->map(fn ($item) => [
-            'product_name'  => $item->product?->name ?? 'Item',
-            'quantity'      => $item->quantity,
-            'unit_price'    => (float)$item->unit_price,
-            'line_total'    => (float)$item->subtotal,
-            'vat_rate'      => $item->product?->is_vat_exempt ? 0 : (float)$config->vat_rate,
-            'vat_amount'    => $item->product?->is_vat_exempt ? 0 : round((float)$item->subtotal * ((float)$config->vat_rate / 100), 2),
+        $lineItems = $sale->items->map(fn($item) => [
+            'product_name' => $item->product?->name ?? 'Item',
+            'quantity'     => $item->quantity,
+            'unit_price'   => (float) $item->unit_price,
+            'line_total'   => (float) $item->subtotal,
+            'vat_rate'     => $item->product?->is_vat_exempt ? 0 : (float) $config->vat_rate,
+            'vat_amount'   => $item->product?->is_vat_exempt ? 0 : round((float) $item->subtotal * ((float) $config->vat_rate / 100), 2),
         ])->toArray();
 
         return [
-            'tin'               => $config->tin,
-            'taxpayer_name'     => $config->taxpayer_name,
-            'device_serial'     => $config->device_serial,
-            'document_type'     => 'receipt',
-            'document_number'   => $sale->receipt_number,
-            'transaction_date'  => $sale->created_at->toIso8601String(),
-            'currency'          => 'NGN',
-            'customer_name'     => $sale->customer?->name ?? 'Walk-in Customer',
-            'customer_tin'      => null,
-            'line_items'        => $lineItems,
-            'subtotal'          => (float)$sale->subtotal,
-            'vat_rate'          => (float)$config->vat_rate,
-            'vat_amount'        => (float)$sale->vat_amount,
-            'discount_amount'   => (float)$sale->discount_amount,
-            'total_amount'      => (float)$sale->total,
-            'payment_method'    => $sale->payment_method,
+            'tin'              => $config->tin,
+            'taxpayer_name'    => $config->taxpayer_name,
+            'device_serial'    => $config->device_serial,
+            'document_type'    => 'receipt',
+            'document_number'  => $sale->receipt_number,
+            'transaction_date' => $sale->created_at->toIso8601String(),
+            'currency'         => 'NGN',
+            'customer_name'    => $sale->customer?->name ?? 'Walk-in Customer',
+            'customer_tin'     => null,
+            'line_items'       => $lineItems,
+            'subtotal'         => (float) $sale->subtotal,
+            'vat_rate'         => (float) $config->vat_rate,
+            'vat_amount'       => (float) $sale->vat_amount,
+            'discount_amount'  => (float) $sale->discount_amount,
+            'total_amount'     => (float) $sale->total,
+            'payment_method'   => $sale->payment_method,
         ];
     }
 
     private function buildWholesalePayload(WholesaleOrder $order, EtaxConfig $config): array
     {
-        $lineItems = $order->items->map(fn ($item) => [
+        $lineItems = $order->items->map(fn($item) => [
             'product_name' => $item->product?->name ?? 'Item',
             'quantity'     => $item->quantity,
-            'unit_price'   => (float)$item->unit_price,
-            'line_total'   => (float)$item->line_total,
-            'vat_rate'     => (float)$config->vat_rate,
-            'vat_amount'   => round((float)$item->line_total * ((float)$config->vat_rate / 100), 2),
+            'unit_price'   => (float) $item->unit_price,
+            'line_total'   => (float) $item->line_total,
+            'vat_rate'     => (float) $config->vat_rate,
+            'vat_amount'   => round((float) $item->line_total * ((float) $config->vat_rate / 100), 2),
         ])->toArray();
 
         return [
@@ -260,10 +269,10 @@ class EtaxService
             'customer_name'    => $order->customer?->business_name,
             'customer_tin'     => $order->customer?->cac_number,
             'line_items'       => $lineItems,
-            'subtotal'         => (float)$order->subtotal,
-            'vat_rate'         => (float)$config->vat_rate,
-            'vat_amount'       => (float)$order->tax_amount,
-            'total_amount'     => (float)$order->total,
+            'subtotal'         => (float) $order->subtotal,
+            'vat_rate'         => (float) $config->vat_rate,
+            'vat_amount'       => (float) $order->tax_amount,
+            'total_amount'     => (float) $order->total,
             'payment_terms'    => $order->customer?->payment_terms,
             'due_date'         => $order->due_date?->toDateString(),
         ];
@@ -277,32 +286,32 @@ class EtaxService
     private function headers(EtaxConfig $config): array
     {
         return [
-            'Content-Type'  => 'application/json',
-            'Accept'        => 'application/json',
-            'X-API-KEY'     => $config->api_key,
-            'X-API-SECRET'  => $config->api_secret,
+            'Content-Type'    => 'application/json',
+            'Accept'          => 'application/json',
+            'X-API-KEY'       => $config->api_key ?? config('services.firs.public_key'),
+            'X-API-SECRET'    => $config->api_secret ?? config('services.firs.secret_key'),
             'X-DEVICE-SERIAL' => $config->device_serial ?? '',
         ];
     }
 
     private function baseUrl(EtaxConfig $config): string
     {
-        return $config->api_environment === 'production' ? self::PRODUCTION_URL : self::SANDBOX_URL;
+        return $config->api_environment === 'production' ? $this->productionUrl() : $this->sandboxUrl();
     }
 
     private function createSkippedRecord(int $branchId, string $sourceType, int $sourceId, string $docNumber, float $total, float $vat): EtaxSubmission
     {
         return EtaxSubmission::create([
-            'branch_id'        => $branchId,
-            'source_type'      => $sourceType,
-            'source_id'        => $sourceId,
-            'document_type'    => 'receipt',
-            'document_number'  => $docNumber,
-            'submission_status'=> 'skipped',
-            'taxable_amount'   => $total - $vat,
-            'vat_amount'       => $vat,
-            'total_amount'     => $total,
-            'error_message'    => 'eTax not enabled for this branch',
+            'branch_id'         => $branchId,
+            'source_type'       => $sourceType,
+            'source_id'         => $sourceId,
+            'document_type'     => 'receipt',
+            'document_number'   => $docNumber,
+            'submission_status' => 'skipped',
+            'taxable_amount'    => $total - $vat,
+            'vat_amount'        => $vat,
+            'total_amount'      => $total,
+            'error_message'     => 'eTax not enabled for this branch',
         ]);
     }
 }

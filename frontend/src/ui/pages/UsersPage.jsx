@@ -59,6 +59,18 @@ function StatusDot({ active }) {
   )
 }
 
+// ── Utility: normalize roles array ─────────────────────────────
+// Receives: user.roles can be [string] or array of role objects.
+// Ensures get array of role names (string).
+function getRoleNames(roles) {
+  if (!Array.isArray(roles)) return []
+  if (roles.length === 0) return []
+  if (typeof roles[0] === 'string')
+    return roles
+  // Role objects from backend: {id, name, guard_name,...}
+  return roles.map((r) => r.name ?? (typeof r === 'string' ? r : 'unknown'))
+}
+
 // ── Schema ────────────────────────────────────────────────────────────────────
 const userSchema = z.object({
   name:              z.string().min(2, 'Name required'),
@@ -134,9 +146,10 @@ export function UsersPage() {
 
   function openEdit(u) {
     setEditUser(u)
+    const roleNames = getRoleNames(u.roles)
     reset({
       name: u.name, email: u.email, phone: u.phone ?? '', password: '',
-      role: u.roles?.[0] ?? 'cashier', branch_id: u.branch_id ?? null,
+      role: roleNames?.[0] ?? 'cashier', branch_id: u.branch_id ?? null,
       staff_id: u.staff_id ?? '', pin: '', pin_login_enabled: u.pin_login_enabled ?? false,
     })
     setModalOpen(true)
@@ -205,11 +218,15 @@ export function UsersPage() {
     {
       key: 'role',
       header: 'Role',
-      cell: (u) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {(u.roles ?? []).map(r => <RoleBadge key={r} role={r} />)}
-        </div>
-      ),
+      cell: (u) => {
+        // Defensive: get normalized array of role names
+        const roleNames = getRoleNames(u.roles)
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {roleNames.map(r => <RoleBadge key={r} role={r} />)}
+          </div>
+        )
+      },
     },
     {
       key: 'branch',
@@ -409,7 +426,7 @@ export function UsersPage() {
               <div>
                 <div style={{ fontWeight: 700, color: '#1C2B3A' }}>{viewUser.name}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                  {(viewUser.roles ?? []).map(r => <RoleBadge key={r} role={r} />)}
+                  {getRoleNames(viewUser.roles).map(r => <RoleBadge key={r} role={r} />)}
                 </div>
               </div>
             </div>
