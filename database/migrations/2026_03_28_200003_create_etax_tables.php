@@ -5,7 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * FIRS eTax Compliance — Nigeria Finance Act 2021 / TaxPro-Max Integration
+ * FIRS eTax Compliance — Nigeria Finance Act 2026 / TaxPro-Max Integration
  *
  * etax_submissions — Every fiscal document (sale receipt, B2B invoice, credit note)
  *                    transmitted to the FIRS gateway gets a row here.

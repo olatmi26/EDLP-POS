@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * EtaxService — FIRS eTax Compliance Integration
  *
- * Nigeria's Finance Act 2021 / FIRS TaxPro-Max mandate:
+ * Nigeria's Finance Act 2026 / FIRS TaxPro-Max mandate:
  * - Every invoice/receipt must be transmitted to FIRS in real time
  * - FIRS assigns a Fiscal Document Number (FDN)
  * - The FDN and a QR code must appear on the printed receipt

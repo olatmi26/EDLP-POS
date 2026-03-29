@@ -9,12 +9,15 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+           
            /*  PermissionSeeder::class,       // roles + permissions (must run first)
             BranchSeeder::class, */           // 7 branches
-            UserSeeder::class,             // users with roles (depends on branches)
+            //UserSeeder::class,             // users with roles (depends on branches)
             /* CategorySeeder::class,         // product categories
             ExpenseCategorySeeder::class,  // expense categories
             ProductSeeder::class,  */         // 34+ products + inventory rows
+             //ApprovalWorkflowSeeder::class,
+           // ChartOfAccountsSeeder::class,
         ]);
 
         $this->command->info('');

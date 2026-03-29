@@ -59,7 +59,11 @@ class ProductBatch extends Model
 
     public function isNearExpiry(int $thresholdDays = 30): bool
     {
-        return $this->expiry_date->diffInDays(today()) <= $thresholdDays && ! $this->expiry_date->isPast();
+        if (is_null($this->expiry_date)) {
+            return false;
+        }
+        $days = today()->diffInDays($this->expiry_date, false);
+        return $days >= 0 && $days <= $thresholdDays;
     }
 
     public function daysUntilExpiry(): int

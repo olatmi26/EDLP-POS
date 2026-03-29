@@ -79,7 +79,7 @@ return new class extends Migration
         Schema::table('sale_items', function (Blueprint $table) {
             $table->foreignId('promotion_id')->nullable()->after('product_id')->constrained('promotions')->nullOnDelete();
             $table->decimal('original_price', 12, 2)->nullable()->after('promotion_id');
-            $table->decimal('discount_amount', 12, 2)->default(0)->after('original_price');
+           // $table->decimal('discount_amount', 12, 2)->default(0)->after('original_price');
         });
     }
 

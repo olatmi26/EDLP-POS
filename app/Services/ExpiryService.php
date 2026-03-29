@@ -39,13 +39,27 @@ class ExpiryService
             ->get();
 
         foreach ($batches as $batch) {
-            if ($remaining <= 0) break;
+            if ($remaining <= 0) {
+                break;
+            }
 
-            $deduct = min($batch->quantity_remaining, $remaining);
-            $batch->deductQuantity($deduct);
+            $available = $batch->quantity_remaining;
+            if ($available <= 0) {
+                continue;
+            }
 
-            $deductions[] = ['batch_id' => $batch->id, 'quantity' => $deduct];
-            $remaining   -= $deduct;
+            $deduct = min($available, $remaining);
+
+            if ($deduct <= 0) {
+                continue;
+            }
+
+            if ($batch->deductQuantity($deduct)) {
+                $deductions[] = ['batch_id' => $batch->id, 'quantity' => $deduct];
+                $remaining   -= $deduct;
+            } else {
+                Log::warning("Failed to deduct quantity from batch #{$batch->id} for product #{$productId} at branch #{$branchId}");
+            }
         }
 
         if ($remaining > 0) {
@@ -105,7 +119,8 @@ class ExpiryService
         foreach ($nearExpiry as $batch) {
             $batch->update(['status' => ProductBatch::STATUS_NEAR_EXPIRY]);
             $flagged++;
-            Log::info("Batch #{$batch->id} ({$batch->product->name ?? 'Product'}) flagged as near-expiry. Expires: {$batch->expiry_date}");
+            $productName = ($batch->product && property_exists($batch->product, 'name')) ? $batch->product->name : 'Product';
+            Log::info("Batch #{$batch->id} ({$productName}) flagged as near-expiry. Expires: {$batch->expiry_date}");
         }
 
         // Mark truly expired
@@ -114,6 +129,7 @@ class ExpiryService
             ->get();
 
         foreach ($expiredBatches as $batch) {
+            $batch = ProductBatch::findOrFail($batch->id);
             $batch->update(['status' => ProductBatch::STATUS_EXPIRED]);
             $expired++;
         }
