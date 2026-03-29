@@ -3,115 +3,191 @@
 namespace Database\Seeders;
 
 use App\Models\ApprovalWorkflow;
-use App\Models\ApprovalStage;
-use App\Models\ApprovalThreshold;
 use Illuminate\Database\Seeder;
 
+/**
+ * REPLACES the original ApprovalWorkflowSeeder.
+ * Now includes:
+ *   - post_approval_viewer_roles: accountants see approved payment requests
+ *   - requires_payment_processing: triggers voucher posting + accountant payment queue
+ *   - payment_account_code: GL debit account for auto-voucher
+ *   - iou, travel_allowance, petty_cash operation types added
+ */
 class ApprovalWorkflowSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->seedWorkflow(
+        // ── Promotion ─────────────────────────────────────────────────────────
+        $this->seed(
             name: 'Promotion Approval',
             type: 'promotion',
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager Review','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'escalate'],
-                ['stage_order'=>2,'stage_name'=>'Admin Approval','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>48,'timeout_action'=>'auto_reject'],
-            ]
+                $this->stage(1, 'Branch Manager Review', 'branch-manager'),
+                $this->stage(2, 'Admin Approval', 'admin', 48, 'auto_reject'),
+            ],
         );
 
-        $this->seedWorkflow(
+        // ── Expense (Standard — under ₦50k) ───────────────────────────────────
+        $this->seed(
             name: 'Expense Approval (Standard)',
             type: 'expense',
+            viewerRoles: ['accountant', 'receivable-accountant'],
+            requiresPayment: true,
+            paymentAccount: 'EXP-MISC',
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'escalate'],
-            ]
-        );
-
-        $this->seedWorkflow(
-            name: 'Expense Approval (High Value)',
-            type: 'expense',
-            stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>12,'timeout_action'=>'escalate'],
-                ['stage_order'=>2,'stage_name'=>'Admin Sign-off','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'auto_reject'],
+                $this->stage(1, 'Branch Manager', 'branch-manager', 24, 'escalate'),
             ],
-            thresholds: [
-                ['field'=>'amount','operator'=>'>=','threshold_value'=>50000], // ≥₦50,000 escalates to this workflow
-            ]
         );
 
-        $this->seedWorkflow(
+        // ── Expense (High Value — ₦50k+) ─────────────────────────────────────
+        $this->seed(
+            name: 'Expense Approval (High Value ≥₦50k)',
+            type: 'expense',
+            viewerRoles: ['accountant', 'receivable-accountant'],
+            requiresPayment: true,
+            paymentAccount: 'EXP-MISC',
+            stages: [
+                $this->stage(1, 'Branch Manager', 'branch-manager', 12, 'escalate'),
+                $this->stage(2, 'Admin Sign-off', 'admin', 24, 'auto_reject'),
+            ],
+            thresholds: [['field'=>'amount','operator'=>'>=','threshold_value'=>50000]],
+        );
+
+        // ── IOU / Staff Advance ───────────────────────────────────────────────
+        $this->seed(
+            name: 'IOU / Staff Advance Approval',
+            type: 'iou',
+            viewerRoles: ['accountant', 'receivable-accountant'],
+            requiresPayment: true,
+            paymentAccount: 'EXP-IOU',
+            stages: [
+                $this->stage(1, 'Branch Manager', 'branch-manager', 24, 'escalate'),
+                $this->stage(2, 'Admin Approval', 'admin', 48, 'auto_reject'),
+            ],
+        );
+
+        // ── Travel Allowance ──────────────────────────────────────────────────
+        $this->seed(
+            name: 'Travel Allowance Approval',
+            type: 'travel_allowance',
+            viewerRoles: ['accountant'],
+            requiresPayment: true,
+            paymentAccount: 'EXP-TRAVEL',
+            stages: [
+                $this->stage(1, 'Branch Manager', 'branch-manager', 24, 'escalate'),
+                $this->stage(2, 'Admin Approval', 'admin', 48, 'auto_reject'),
+            ],
+        );
+
+        // ── Petty Cash ────────────────────────────────────────────────────────
+        $this->seed(
+            name: 'Petty Cash Approval',
+            type: 'petty_cash',
+            viewerRoles: ['accountant'],
+            requiresPayment: true,
+            paymentAccount: 'EXP-PETTY',
+            creditAccount: 'CASH-MAIN',
+            stages: [
+                $this->stage(1, 'Branch Manager', 'branch-manager', 12, 'escalate'),
+            ],
+        );
+
+        // ── Purchase Order ────────────────────────────────────────────────────
+        $this->seed(
             name: 'Purchase Order Approval',
             type: 'purchase_order',
+            viewerRoles: ['accountant'],
+            requiresPayment: true,
+            paymentAccount: '5000', // COGS
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'escalate'],
-                ['stage_order'=>2,'stage_name'=>'Admin (Large Orders)','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>48,'timeout_action'=>'auto_reject'],
+                $this->stage(1, 'Branch Manager', 'branch-manager', 24, 'escalate'),
+                $this->stage(2, 'Admin (Large Orders)', 'admin', 48, 'auto_reject'),
             ],
-            thresholds: [
-                ['field'=>'total_amount','operator'=>'>=','threshold_value'=>200000], // ≥₦200,000 requires both stages
-            ]
+            thresholds: [['field'=>'total_amount','operator'=>'>=','threshold_value'=>200000]],
         );
 
-        $this->seedWorkflow(
+        // ── Stock Movement (Standard) ─────────────────────────────────────────
+        $this->seed(
             name: 'Stock Movement Approval',
             type: 'stock_movement',
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>48,'timeout_action'=>'escalate'],
-            ]
+                $this->stage(1, 'Branch Manager', 'branch-manager', 48, 'escalate'),
+            ],
         );
 
-        $this->seedWorkflow(
-            name: 'Stock Movement Approval (Large Quantity)',
+        // ── Stock Movement (Large Qty ≥10) ────────────────────────────────────
+        $this->seed(
+            name: 'Stock Movement Approval (Large Quantity ≥10)',
             type: 'stock_movement',
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'escalate'],
-                ['stage_order'=>2,'stage_name'=>'Admin Review','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>48,'timeout_action'=>'auto_reject'],
+                $this->stage(1, 'Branch Manager', 'branch-manager', 24, 'escalate'),
+                $this->stage(2, 'Admin Review', 'admin', 48, 'auto_reject'),
             ],
-            thresholds: [
-                ['field'=>'quantity','operator'=>'>=','threshold_value'=>10], // ≥10 units escalates
-            ]
+            thresholds: [['field'=>'quantity','operator'=>'>=','threshold_value'=>10]],
         );
 
-        $this->seedWorkflow(
+        // ── Expiry Disposal ───────────────────────────────────────────────────
+        $this->seed(
             name: 'Expiry Disposal Approval',
             type: 'expiry_disposal',
+            viewerRoles: ['accountant'],
+            requiresPayment: false,
+            paymentAccount: 'EXP-EXPIRY',
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Branch Manager','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>12,'timeout_action'=>'escalate'],
-                ['stage_order'=>2,'stage_name'=>'Admin (High Value Write-off)','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'auto_reject'],
+                $this->stage(1, 'Branch Manager', 'branch-manager', 12, 'escalate'),
+                $this->stage(2, 'Admin (High Value Write-off)', 'admin', 24, 'auto_reject'),
             ],
-            thresholds: [
-                ['field'=>'write_off_value','operator'=>'>=','threshold_value'=>10000], // ≥₦10k write-off requires admin
-            ]
+            thresholds: [['field'=>'write_off_value','operator'=>'>=','threshold_value'=>10000]],
         );
 
-        $this->seedWorkflow(
+        // ── Wholesale Order ───────────────────────────────────────────────────
+        $this->seed(
             name: 'Wholesale Order Approval',
             type: 'wholesale_order',
+            viewerRoles: ['accountant', 'receivable-accountant'],
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Sales Manager Review','approver_type'=>'role','approver_role'=>'branch-manager','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'escalate'],
-                ['stage_order'=>2,'stage_name'=>'Admin Approval','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>48,'timeout_action'=>'auto_reject'],
-            ]
+                $this->stage(1, 'Sales Manager Review', 'branch-manager', 24, 'escalate'),
+                $this->stage(2, 'Admin Approval', 'admin', 48, 'auto_reject'),
+            ],
         );
 
-        $this->seedWorkflow(
+        // ── Bulk Pricing ──────────────────────────────────────────────────────
+        $this->seed(
             name: 'Bulk Pricing Approval',
             type: 'bulk_pricing',
             stages: [
-                ['stage_order'=>1,'stage_name'=>'Admin Approval','approver_type'=>'role','approver_role'=>'admin','min_approvers'=>1,'timeout_hours'=>24,'timeout_action'=>'auto_reject'],
-            ]
+                $this->stage(1, 'Admin Approval', 'admin', 24, 'auto_reject'),
+            ],
         );
     }
 
-    private function seedWorkflow(string $name, string $type, array $stages, array $thresholds = []): void
-    {
-        // Skip if already seeded (idempotent)
-        if (ApprovalWorkflow::where('name', $name)->exists()) return;
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private function seed(
+        string  $name,
+        string  $type,
+        array   $stages,
+        array   $viewerRoles   = [],
+        bool    $requiresPayment = false,
+        string  $paymentAccount = 'EXP-MISC',
+        string  $creditAccount  = 'AP-PAYABLE',
+        array   $thresholds    = [],
+    ): void {
+        if (ApprovalWorkflow::where('name', $name)->exists()) {
+            $this->command->line("  ↷ Skipping (exists): {$name}");
+            return;
+        }
 
         $workflow = ApprovalWorkflow::create([
-            'name'           => $name,
-            'operation_type' => $type,
-            'is_active'      => true,
-            'description'    => "Default {$type} workflow — fully configurable via Settings → Approval Workflows.",
+            'name'                       => $name,
+            'operation_type'             => $type,
+            'is_active'                  => true,
+            'description'                => "Default {$type} workflow — configurable via Settings → Approval Workflows.",
+            'post_approval_viewer_roles' => $viewerRoles ?: null,
+            'post_approval_viewer_users' => null,
+            'requires_payment_processing'=> $requiresPayment,
+            'payment_account_code'       => $requiresPayment ? $paymentAccount : null,
+            'credit_account_code'        => $requiresPayment ? $creditAccount : null,
         ]);
 
         foreach ($stages as $stage) {
@@ -122,6 +198,24 @@ class ApprovalWorkflowSeeder extends Seeder
             $workflow->thresholds()->create($threshold);
         }
 
-        $this->command->info("  ✓ Seeded workflow: {$name}");
+        $this->command->info("  ✓ Seeded: {$name}" . ($requiresPayment ? ' [payment workflow]' : ''));
+    }
+
+    private function stage(
+        int    $order,
+        string $name,
+        string $role,
+        int    $timeoutHours  = 48,
+        string $timeoutAction = 'escalate',
+    ): array {
+        return [
+            'stage_order'    => $order,
+            'stage_name'     => $name,
+            'approver_type'  => 'role',
+            'approver_role'  => $role,
+            'min_approvers'  => 1,
+            'timeout_hours'  => $timeoutHours,
+            'timeout_action' => $timeoutAction,
+        ];
     }
 }
