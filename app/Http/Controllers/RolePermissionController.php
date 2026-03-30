@@ -27,7 +27,7 @@ class RolePermissionController extends Controller
      */
     public function index(): JsonResponse
     {
-        $roles = Role::where('guard_name', 'sanctum')
+        $roles = Role::with('permissions')->where('guard_name', 'sanctum')
             ->withCount('permissions')
             ->withCount('users')
             ->orderBy('name')
@@ -37,6 +37,10 @@ class RolePermissionController extends Controller
                 'name'             => $r->name,
                 'permissions_count'=> $r->permissions_count,
                 'users_count'      => $r->users_count,
+                'permissions'      => $r->whenLoaded('permissions', fn() => $r->permissions->map(fn($p) => [
+                        'id'   => $p->id,
+                        'name' => $p->name,
+                    ])),
             ]);
 
         return $this->success($roles);
@@ -120,12 +124,16 @@ class RolePermissionController extends Controller
      * GET /api/permissions
      * Returns all defined permissions grouped by module prefix.
      */
-    public function allPermissions(): JsonResponse
+    public function allPermissions(Request $request): JsonResponse
     {
-        $permissions = Permission::where('guard_name', 'sanctum')
-            ->orderBy('name')
-            ->pluck('name')
-            ->values();
+        $isSuperAdmin = $request->user()?->hasRole('super-admin');
+        $permissions = Permission::all()->where('guard_name', 'sanctum')->groupBy(fn($p) => explode('.', $p->name)[0]) 
+        ->map(fn($group) => $group->map(fn($p) => [
+            'id'   => $p->id,
+            'name' => $p->name,
+        ])->values());
+        
+          
 
         // Group by module prefix (e.g. "products.view" → group "products")
         $grouped = [];
@@ -142,5 +150,31 @@ class RolePermissionController extends Controller
             'permissions' => $permissions,
             'grouped'     => $grouped,
         ]);
+    }
+
+
+
+    public function assignToRole(Request $request, string $roleName): JsonResponse
+    {
+        // Only super-admin can modify
+        if (! $request->user()?->hasRole('super-admin')) {
+            return $this->error('Only Super Admin can modify role permissions.', 403);
+        }
+
+        $role = Role::where('name', $roleName)
+            ->where('guard_name', 'sanctum')
+            ->firstOrFail();
+
+        $request->validate([
+            'permissions'   => 'required|array',
+            'permissions.*' => 'string',
+        ]);
+
+        $permissions = Permission::where('guard_name', 'sanctum')
+            ->whereIn('name', $request->permissions)
+            ->get();
+        $role->syncPermissions($request->input('permissions', []));
+
+        return $this->success(null, 'Permissions updated.');
     }
 }

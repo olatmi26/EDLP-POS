@@ -227,9 +227,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
   }
   function openEdit(u) {
     setEditUser(u)
-    const firstRole = u.roles?.[0]
-    const roleName = typeof firstRole === 'object' ? firstRole?.name : firstRole
-    reset({ name:u.name,email:u.email,phone:u.phone??'',password:'',role:roleName??'cashier',branch_id:u.branch_id??null,staff_id:u.staff_id??'',pin:'',pin_login_enabled:u.pin_login_enabled??false })
+    reset({ name:u.name,email:u.email,phone:u.phone??'',password:'',role:u.roles?.[0]??'cashier',branch_id:u.branch_id??null,staff_id:u.staff_id??'',pin:'',pin_login_enabled:u.pin_login_enabled??false })
     setModalOpen(true)
   }
 
@@ -262,7 +260,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     return {
       total:  meta?.total ?? 0,
       active: all.filter((u) => u.is_active).length,
-      admins: all.filter((u) => (u.roles ?? []).some((r) => ['super-admin','admin'].includes(typeof r === 'object' ? r?.name : r))).length,
+      admins: all.filter((u) => (u.roles ?? []).some((r) => ['super-admin','admin'].includes(r))).length,
     }
   }, [users, meta])
 
@@ -270,7 +268,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
   const columns = useMemo(() => [
     {
       key: 'name', header: 'Staff Member',
-      render: (u) => (
+      cell: (u) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Avatar name={u.name} />
           <div>
@@ -282,11 +280,11 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     },
     {
       key: 'role', header: 'Role',
-      render: (u) => (u.roles ?? []).map((r) => { const rName = typeof r === 'object' ? r?.name : r; return <RolePill key={rName} name={rName} /> }),
+      cell: (u) => (u.roles ?? []).map((r) => <RolePill key={r} name={r} />),
     },
     {
       key: 'branch', header: 'Branch',
-      render: (u) => {
+      cell: (u) => {
         // Fix: ensure only string is rendered, not an object
         let branchName = 'All Branches'
         // Accept branch as string or {name: string}, but not full object
@@ -307,7 +305,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     },
     {
       key: 'last_login', header: 'Last Login',
-      render: (u) => (
+      cell: (u) => (
         <span style={{ fontSize: 12, color: '#8A9AB5' }}>
           {u.last_login_at ? formatDistanceToNow(new Date(u.last_login_at), { addSuffix: true }) : 'Never'}
         </span>
@@ -315,7 +313,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     },
     {
       key: 'status', header: 'Status',
-      render: (u) => (
+      cell: (u) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{
             fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
@@ -332,7 +330,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
     },
     ...(isAdminLike ? [{
       key: 'actions', header: '',
-      render: (u) => (
+      cell: (u) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
           <button title="View permissions" onClick={(e) => { e.stopPropagation(); setViewUser(u) }}
             style={{ padding: 5, borderRadius: 6, border: '1px solid #E5EBF2', background: 'transparent', cursor: 'pointer', color: '#8A9AB5', display: 'flex' }}>
@@ -504,7 +502,7 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
                 <div style={{ fontWeight:700,color:'#1C2B3A',fontSize:14 }}>{viewUser.name}</div>
                 <div style={{ fontSize:12,color:'#8A9AB5',marginTop:2 }}>{viewUser.email}</div>
                 <div style={{ display:'flex',gap:6,marginTop:6,flexWrap:'wrap' }}>
-                  {(viewUser.roles??[]).map((r)=>{ const rName = typeof r === 'object' ? r?.name : r; return <RolePill key={rName} name={rName}/> })}
+                  {(viewUser.roles??[]).map((r)=><RolePill key={r} name={r}/>)}
                 </div>
               </div>
             </div>
@@ -885,23 +883,29 @@ const TABS = [
   { key: 'permissions', label: 'Permissions', icon: Lock },
 ]
 
+const TAB_META = {
+  users:       { title: 'Staff Accounts',        subtitle: 'Manage staff accounts, branch assignments and login credentials.' },
+  roles:       { title: 'Roles & Access Levels', subtitle: 'View each system role and the permission set it grants.' },
+  permissions: { title: 'Permission Matrix',     subtitle: 'Grant or revoke individual permissions per role. Super Admin only.' },
+}
+
 export function UsersPage() {
   const currentUser  = useAuthStore((s) => s.user)
   const isAdminLike  = useAuthStore((s) => s.isAdminLike())
   const isSuperAdmin = useAuthStore((s) => s.hasRole('super-admin'))
   const [activeTab, setActiveTab] = useState('users')
 
+  const { title, subtitle } = TAB_META[activeTab] ?? TAB_META.users
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <ShimmerStyle />
 
-      {/* Page header */}
+      {/* Page header — dynamic per active tab */}
       <div style={{ display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:12 }}>
         <div>
-          <h1 style={{ margin:0,fontSize:22,fontWeight:800,color:'#1C2B3A' }}>Identity & Access Management</h1>
-          <p style={{ margin:'4px 0 0',fontSize:13,color:'#8A9AB5' }}>
-            Manage staff accounts, roles, branch assignments and permission sets.
-          </p>
+          <h1 style={{ margin:0,fontSize:22,fontWeight:800,color:'#1C2B3A' }}>{title}</h1>
+          <p style={{ margin:'4px 0 0',fontSize:13,color:'#8A9AB5' }}>{subtitle}</p>
         </div>
       </div>
 

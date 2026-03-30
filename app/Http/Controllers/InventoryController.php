@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Inventory\AdjustInventoryRequest;
@@ -12,7 +11,8 @@ use Illuminate\Http\Request;
 
 class InventoryController extends Controller
 {
-    public function __construct(private readonly InventoryService $inventoryService) {}
+    public function __construct(private readonly InventoryService $inventoryService)
+    {}
 
     /**
      * GET /api/inventory
@@ -28,15 +28,15 @@ class InventoryController extends Controller
                 // Skip branch filter for super-admin/admin if no specific branch requested
                 // or if branch_id is null (super-admin at group level)
                 $branchId && (! $user->isSuperAdmin() || $request->has('branch_id')),
-                fn ($q) => $q->forBranch((int) $branchId)
+                fn($q) => $q->forBranch((int) $branchId)
             )
             ->when(! $branchId && ! $user->isSuperAdmin() && ! $user->isAdmin(),
-                fn ($q) => $q->forBranch((int) $user->branch_id)
+                fn($q) => $q->forBranch((int) $user->branch_id)
             )
-            ->when($request->status === 'low', fn ($q) => $q->lowStock())
-            ->when($request->status === 'out', fn ($q) => $q->outOfStock())
-            ->when($request->category_id, fn ($q, $id) => $q->whereHas('product', fn ($p) => $p->where('category_id', $id)))
-            ->when($request->search, fn ($q, $s) => $q->whereHas('product', fn ($p) => $p->search($s)))
+            ->when($request->status === 'low', fn($q) => $q->lowStock())
+            ->when($request->status === 'out', fn($q) => $q->outOfStock())
+            ->when($request->category_id, fn($q, $id) => $q->whereHas('product', fn($p) => $p->where('category_id', $id)))
+            ->when($request->search, fn($q, $s) => $q->whereHas('product', fn($p) => $p->search($s)))
             ->orderBy('product_id');
 
         return $this->paginatedSuccess($query->paginate($request->get('per_page', 20)));
@@ -68,10 +68,10 @@ class InventoryController extends Controller
         $items = Inventory::with(['product.category', 'branch'])
             ->when(
                 $branchId && (! $user->isSuperAdmin() || $request->has('branch_id')),
-                fn ($q) => $q->forBranch((int) $branchId)
+                fn($q) => $q->forBranch((int) $branchId)
             )
             ->when(! $branchId && ! $user->isSuperAdmin() && ! $user->isAdmin(),
-                fn ($q) => $q->forBranch((int) $user->branch_id)
+                fn($q) => $q->forBranch((int) $user->branch_id)
             )
             ->lowStock()
             ->get();
@@ -86,11 +86,11 @@ class InventoryController extends Controller
     {
         $inventory = $this->inventoryService->adjust(
             productId: $request->product_id,
-            branchId:  (int) ($request->branch_id ?? $request->user()->branch_id),
-            type:      $request->type,
-            quantity:  $request->quantity,
-            notes:     $request->notes,
-            user:      $request->user()
+            branchId: (int) ($request->branch_id ?? $request->user()->branch_id),
+            type: $request->type,
+            quantity: $request->quantity,
+            notes: $request->notes,
+            user: $request->user()
         );
 
         return $this->success(new InventoryResource($inventory->load('product', 'branch')), 'Stock adjusted');
@@ -129,5 +129,37 @@ class InventoryController extends Controller
     {
         $transfer = $this->inventoryService->approveTransfer($transferId, $request->user());
         return $this->success($transfer, 'Transfer approved and stock updated');
+    }
+
+    /**
+     * GET /api/inventory/analytics
+     * Returns inventory KPIs and low stock list for the current branch.
+     */
+    public function analytics(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $branchId = (int) ($request->branch_id ?? $user->branch_id);
+
+        $kpis = [
+            'total_skus'      => Inventory::where('branch_id', $branchId)->count(),
+            'low_stock_count' => Inventory::where('branch_id', $branchId)->whereBetween('quantity', [1, 5])->count(),
+            'out_of_stock'    => Inventory::where('branch_id', $branchId)->where('quantity', '<=', 0)->count(),
+            'total_value'     => Inventory::where('branch_id', $branchId)
+                ->join('products', 'inventories.product_id', '=', 'products.id')
+                ->sum(\DB::raw('inventories.quantity * products.cost_price')),
+        ];
+
+        $lowStock = Inventory::with(['product.category'])
+            ->where('branch_id', $branchId)
+            ->where('quantity', '<=', 5)
+            ->orderBy('quantity')
+            ->limit(20)
+            ->get();
+
+        return $this->success([
+            'kpis'      => $kpis,
+            'low_stock' => $lowStock,
+            // movement_trend and stock_by_category not yet implemented
+        ]);
     }
 }

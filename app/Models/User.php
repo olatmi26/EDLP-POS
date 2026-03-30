@@ -27,6 +27,7 @@ class User extends Authenticatable implements HasMedia
         'last_login_at',
         'pin_login_enabled',
         'preferences',
+        'is_online',
     ];
 
     protected $hidden = [
@@ -42,6 +43,7 @@ class User extends Authenticatable implements HasMedia
         'pin_login_enabled' => 'boolean',
         'preferences'       => 'array',
         'password'          => 'hashed',
+        'is_online'         => 'boolean',
     ];
 
     // Add the dates property to handle soft deletes

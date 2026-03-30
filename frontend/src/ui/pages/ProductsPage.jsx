@@ -38,7 +38,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-const TABS = ['Catalog', 'Price History', 'Analytics']
+const TABS = ['Product List', 'Price History', 'Analytics']
 
 const STATUS_OPTIONS = [
   { v: '',       label: 'All Status' },
@@ -399,6 +399,8 @@ function AnalyticsTab({ products, loading }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function PriceHistoryTab({ products, loading }) {
   const [searchPH, setSearchPH] = useState('')
+  const [phPage, setPhPage]     = useState(1)
+  const PH_PER_PAGE = 20
 
   const filtered = useMemo(() => {
     const q = searchPH.toLowerCase()
@@ -406,6 +408,9 @@ function PriceHistoryTab({ products, loading }) {
       (p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
     )
   }, [products, searchPH])
+
+  const totalPhPages = Math.max(1, Math.ceil(filtered.length / PH_PER_PAGE))
+  const paginated    = filtered.slice((phPage - 1) * PH_PER_PAGE, phPage * PH_PER_PAGE)
 
   return (
     <Card>
@@ -423,7 +428,7 @@ function PriceHistoryTab({ products, loading }) {
             }}
           />
         </div>
-        <span style={{ fontSize: 12, color: '#8A9AB5' }}>{filtered.length} products</span>
+        <span style={{ fontSize: 12, color: '#8A9AB5' }}>{filtered.length} products · Page {phPage} of {totalPhPages}</span>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
@@ -440,7 +445,7 @@ function PriceHistoryTab({ products, loading }) {
           <tbody>
             {loading
               ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
-              : filtered.map((p) => {
+              : paginated.map((p) => {
                   const margin = p.cost_price > 0
                     ? Math.round(((p.selling_price - p.cost_price) / p.selling_price) * 100)
                     : null
@@ -491,6 +496,21 @@ function PriceHistoryTab({ products, loading }) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPhPages > 1 && (
+        <div style={{ display:'flex',justifyContent:'center',alignItems:'center',gap:8,padding:'14px 20px',borderTop:'1px solid #F0F4F8' }}>
+          <button onClick={() => setPhPage(p => Math.max(1, p-1))} disabled={phPage <= 1}
+            style={{ padding:'6px 14px',borderRadius:8,border:'1px solid #E5EBF2',background:'#fff',cursor:phPage<=1?'not-allowed':'pointer',color:phPage<=1?'#D5DFE9':'#3A4A5C',fontSize:13,fontWeight:600 }}>
+            ← Prev
+          </button>
+          <span style={{ fontSize:13,color:'#8A9AB5' }}>Page {phPage} of {totalPhPages} · {filtered.length} products</span>
+          <button onClick={() => setPhPage(p => Math.min(totalPhPages, p+1))} disabled={phPage >= totalPhPages}
+            style={{ padding:'6px 14px',borderRadius:8,border:'1px solid #E5EBF2',background:'#fff',cursor:phPage>=totalPhPages?'not-allowed':'pointer',color:phPage>=totalPhPages?'#D5DFE9':'#3A4A5C',fontSize:13,fontWeight:600 }}>
+            Next →
+          </button>
+        </div>
+      )}
     </Card>
   )
 }
@@ -503,7 +523,7 @@ export function ProductsPage() {
   const isAdminLike = useAuthStore((s) => s.isAdminLike())
 
   // Tab
-  const [activeTab, setActiveTab] = useState('Catalog')
+  const [activeTab, setActiveTab] = useState('Product List')
 
   // Catalog filters
   const [search, setSearch]             = useState('')
@@ -549,7 +569,7 @@ export function ProductsPage() {
       return res.data?.data ?? []
     },
     staleTime: 60_000,
-    enabled: activeTab !== 'Catalog',
+    enabled: activeTab !== 'Product List',
   })
 
   // Categories (derived from products)
@@ -708,7 +728,7 @@ export function ProductsPage() {
   const columns = useMemo(() => [
     {
       key: 'name', header: 'Product',
-      render: (p) => (
+      cell: (p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ProductThumb url={p.thumbnail_url} name={p.name} />
           <div>
@@ -724,7 +744,7 @@ export function ProductsPage() {
     },
     {
       key: 'sku', header: 'SKU / Barcode',
-      render: (p) => (
+      cell: (p) => (
         <div>
           <div style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: '#1A3FA6' }}>{p.sku}</div>
           {p.barcode && <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#8A9AB5' }}>{p.barcode}</div>}
@@ -733,13 +753,13 @@ export function ProductsPage() {
     },
     {
       key: 'supplier', header: 'Supplier',
-      render: (p) => (
+      cell: (p) => (
         <span style={{ fontSize: 12, color: '#6B7A8D' }}>{p.supplier?.name ?? '—'}</span>
       ),
     },
     {
       key: 'selling_price', header: 'Price',
-      render: (p) => (
+      cell: (p) => (
         <div>
           <div style={{ fontWeight: 700, color: '#1A6E3A', fontSize: 13 }}>{money(p.selling_price)}</div>
           <div style={{ fontSize: 11, color: '#8A9AB5' }}>Cost: {money(p.cost_price)}</div>
@@ -748,7 +768,7 @@ export function ProductsPage() {
     },
     {
       key: 'stock', header: 'Stock Level',
-      render: (p) => {
+      cell: (p) => {
         if (p.stock === null || p.stock === undefined) {
           return <span style={{ fontSize: 12, color: '#D5DFE9' }}>—</span>
         }
@@ -763,7 +783,7 @@ export function ProductsPage() {
     },
     {
       key: 'status', header: 'Status',
-      render: (p) => {
+      cell: (p) => {
         const st = p.stock_status
         const cfg = {
           ok:      { label: 'In Stock',   color: '#1A6E3A', bg: '#EAF5EE' },
@@ -783,7 +803,7 @@ export function ProductsPage() {
     },
     ...(isAdminLike ? [{
       key: 'actions', header: '',
-      render: (p) => (
+      cell: (p) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
           <button title="Upload image" onClick={(e) => { e.stopPropagation(); setImageTarget(p) }}
             style={{ padding: '5px', borderRadius: 6, border: '1px solid #E5EBF2', background: 'transparent', cursor: 'pointer', color: '#8A9AB5', display: 'flex', alignItems: 'center' }}>
@@ -851,7 +871,7 @@ export function ProductsPage() {
       <Tabs tabs={TABS} active={activeTab} onChange={(t) => { setActiveTab(t); setPage(1) }} />
 
       {/* ── CATALOG TAB ─────────────────────────────────────── */}
-      {activeTab === 'Catalog' && (
+      {activeTab === 'Product List' && (
         <Card>
           {/* Filters bar */}
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #F0F4F8', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>

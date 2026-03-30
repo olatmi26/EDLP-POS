@@ -64,6 +64,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
         ->middleware('permission:products.import');
     Route::post('products/{product}/image', [ProductController::class, 'uploadImage'])
         ->middleware('permission:products.edit');
+    
+    Route::patch('products/{product}/price', [ProductController::class, 'updatePrice']);
+    //Route::post('products/bulk-price', [ProductController::class, 'bulkPriceUpdate']);
+    Route::get('products/export', [ProductController::class, 'export']);
+    //Route::post('products/import', [ProductController::class, 'import']);
+    Route::post('products/import/preview', [ProductController::class, 'importPreview']);
 
     Route::get('products', [ProductController::class, 'index'])
         ->middleware('permission:products.view');
@@ -93,6 +99,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
         ->middleware('permission:inventory.transfer');
     Route::patch('inventory/transfers/{transfer}/approve', [InventoryController::class, 'approveTransfer'])
         ->middleware('permission:inventory.approve');
+    
+    Route::get('inventory/analytics', [InventoryController::class, 'analytics']);
 
     // ── Customers ─────────────────────────────────────────────────────────────
     Route::post('customers/merge',                      [CustomerController::class, 'merge']);

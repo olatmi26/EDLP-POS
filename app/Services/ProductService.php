@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Services;
 
 use App\Models\Inventory;
@@ -99,13 +98,13 @@ class ProductService
                 $product->update(['selling_price' => $newPrice]);
 
                 PriceHistory::create([
-                    'product_id'   => $product->id,
-                    'changed_by'   => $changedBy->id,
-                    'old_price'    => $oldPrice,
-                    'new_price'    => $newPrice,
-                    'change_type'  => 'bulk_' . $data['type'],
+                    'product_id'    => $product->id,
+                    'changed_by'    => $changedBy->id,
+                    'old_price'     => $oldPrice,
+                    'new_price'     => $newPrice,
+                    'change_type'   => 'bulk_' . $data['type'],
                     'change_reason' => $data['reason'] ?? null,
-                    'effective_at' => now(),
+                    'effective_at'  => now(),
                 ]);
 
                 $updated++;
@@ -161,5 +160,104 @@ class ProductService
         });
 
         return compact('imported', 'skipped', 'errors');
+    }
+
+    /**
+     * Export products as CSV.
+     * Admin, super-admin, or CEO can download/export all products for all branches,
+     * unless a branch filter is applied (user has limited branch_id).
+     *
+     * @param \App\Models\User $user
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    public function export($user)
+    {
+        // Determine if the user has permission to access all branches
+        // Convention: roles might be ['admin', 'super-admin', 'ceo'] for all access
+        // Adjust role check according to your actual authorization logic
+        $hasGlobalAccess = in_array($user->role, ['admin', 'super-admin', 'ceo']);
+
+        $branchId = $user->branch_id ?? null;
+
+        $query = Product::with([
+            'category',
+            'supplier',
+            'inventory' => function ($q) use ($branchId, $hasGlobalAccess) {
+                // Only scope inventory if the user's branch is restricted
+                if ($branchId && !$hasGlobalAccess) {
+                    $q->where('branch_id', $branchId);
+                }
+            },
+        ]);
+
+        // If user doesn't have global access and has branchId, limit products to branch
+        // Otherwise, return all products (for admin/ceo/super-admin or if branchId is not set)
+        if ($branchId && !$hasGlobalAccess) {
+            $query->where('category_id', function ($sub) use ($branchId) {
+                // Filter here if products are branch-specific; remove or edit if not needed
+                // Or use a custom scope if needed to restrict to branch
+            });
+        }
+
+        $products = $query->get();
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="edlp-products.csv"',
+        ];
+
+        $columns = ['name', 'sku', 'barcode', 'category', 'supplier', 'cost_price', 'selling_price', 'stock', 'branch'];
+
+        return response()->stream(function () use ($products, $columns, $branchId, $hasGlobalAccess) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, $columns);
+
+            foreach ($products as $product) {
+                // If global, output inventory per branch if multiple, else use branch/user's branch
+                $stock = 0;
+                $branch = null;
+
+                if ($hasGlobalAccess || !$branchId) {
+                    // Output total stock and show all branches the product appears in
+                    if ($product->inventory && $product->inventory->count()) {
+                        // Optionally: output one row per branch
+                        foreach ($product->inventory as $inv) {
+                            fputcsv($handle, [
+                                $product->name,
+                                $product->sku,
+                                $product->barcode,
+                                $product->category?->name,
+                                $product->supplier?->name,
+                                $product->cost_price,
+                                $product->selling_price,
+                                $inv->quantity,
+                                $inv->branch_id
+                            ]);
+                        }
+                        continue;
+                    } else {
+                        $stock = 0;
+                        $branch = null;
+                    }
+                } else {
+                    // Restricted branch; output for that branch only
+                    $stock = $product->inventory?->first()?->quantity ?? 0;
+                    $branch = $branchId;
+                }
+
+                fputcsv($handle, [
+                    $product->name,
+                    $product->sku,
+                    $product->barcode,
+                    $product->category?->name,
+                    $product->supplier?->name,
+                    $product->cost_price,
+                    $product->selling_price,
+                    $stock,
+                    $branch,
+                ]);
+            }
+            fclose($handle);
+        }, 200, $headers);
     }
 }

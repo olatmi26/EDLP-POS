@@ -184,4 +184,39 @@ class ProductController extends Controller
             'Image uploaded'
         );
     }
+
+
+    public function updatePrice(Request $request, Product $product): JsonResponse
+    {
+        $validatedPrice = $request->validate([
+            'selling_price' => 'required|numeric|min:0',
+        ])['selling_price'];
+
+        if ($product->selling_price == $validatedPrice) {
+            return $this->success(['product' => $product], 'Price is already up to date.');
+        }
+
+        // Use DB facade directly only if not bound via import, otherwise use the injected database manager
+        $oldPrice = $product->selling_price;
+        $product->update(['selling_price' => $validatedPrice]);
+
+        DB::table('price_history')->insert([
+            'product_id'  => $product->id,
+            'old_price'   => $oldPrice,
+            'new_price'   => $validatedPrice,
+            'changed_by'  => $request->user()?->id ?? null,
+            'created_at'  => now(),
+            'effective_at' => now(),
+            'change_type' => 'manual',
+            'change_reason' => 'Price updated manually',
+        ]);
+
+        // Refresh to reflect the updated price in data
+        $product->refresh();
+
+        return $this->success(
+            ['product' => $product],
+            'Price updated successfully.'
+        );
+    }
 }

@@ -27,10 +27,19 @@ class UserController extends Controller
         $user  = $request->user();
         $query = User::with(['branch', 'roles'])
             ->when(! $user->isSuperAdmin(), fn ($q) => $q->where('branch_id', $request->branch_id))
-            ->when($request->search, fn ($q, $s) => $q->where(
+            /* ->when($request->search, fn ($q, $s) => $q->where(
                 fn ($inner) => $inner->where('name', 'LIKE', "%{$s}%")->orWhere('email', 'LIKE', "%{$s}%")
-            ))
-            ->when($request->role, fn ($q, $role) => $q->role($role))
+            )) */
+            ->when($request->search, fn($q) => $q->where(function ($q) use ($request) {
+                $q->where('name', 'like', "%{$request->search}%")
+                  ->orWhere('email', 'like', "%{$request->search}%")
+                  ->orWhere('phone', 'like', "%{$request->search}%")
+                  ->orWhere('staff_id', 'like', "%{$request->search}%");
+            }))
+            //->when($request->role, fn ($q, $role) => $q->role($role))
+            ->when($request->role, fn($q) => $q->whereHas('roles', fn($q) => $q->where('name', $request->role)))
+            ->when($request->boolean('online_only', false), fn($q) => $q->where('is_online', true))
+            ->latest('last_login_at')
             ->when($request->boolean('active_only', true), fn ($q) => $q->active())
             ->orderBy('name');
 

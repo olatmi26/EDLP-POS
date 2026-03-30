@@ -46,6 +46,7 @@ const NAV_GROUPS = [
       { to:'/accounting',      icon:BookOpen,    label:'Accounting' },
       { to:'/workflow-config', icon:GitBranch,   label:'Workflow Config' },
       { to:'/settings',        icon:Settings,    label:'Settings' },
+      { to:'/Profile', icon:Users, label:'Profile / IAM' },
     ],
   },
 ]

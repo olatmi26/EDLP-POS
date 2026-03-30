@@ -35,6 +35,7 @@ class AuthController extends Controller
         $user->update(['last_login_at' => now()]);
 
         $token = $user->createToken('pos-session', $this->abilitiesFor($user))->plainTextToken;
+        $user->update(['last_login_at' => now(), 'is_online' => true]);
 
         return $this->success([
             'token' => $token,
@@ -65,6 +66,7 @@ class AuthController extends Controller
         $user->update(['last_login_at' => now()]);
 
         $token = $user->createToken('pos-pin-session', $this->abilitiesFor($user))->plainTextToken;
+        $user->update(['last_login_at' => now(), 'is_online' => true]);
 
         return $this->success([
             'token' => $token,
@@ -97,6 +99,7 @@ class AuthController extends Controller
 
         // Clear cached guard state (helps in PHPUnit request sequences).
         Auth::forgetGuards();
+        $user()->update(['is_online' => false]);
 
         return $this->success(null, 'Logged out successfully');
     }
