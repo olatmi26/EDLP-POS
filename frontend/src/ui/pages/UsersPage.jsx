@@ -479,8 +479,8 @@ function UsersTab({ currentUser, isAdminLike, isSuperAdmin }) {
             <FormField label="Staff ID" error={errors.staff_id?.message} hint="Required for PIN login">
               <FormInput register={register('staff_id')} placeholder="EMP001" />
             </FormField>
-            <FormField label="4-Digit PIN" hint="Leave blank to keep current">
-              <FormInput register={register('pin')} type="password" placeholder="••••" maxLength={4} />
+            <FormField label="6-Digit PIN" hint="Leave blank to keep current">
+              <FormInput register={register('pin')} type="password" placeholder="••••••" maxLength={6} />
             </FormField>
           </div>
           <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'#3A4A5C' }}>
@@ -575,7 +575,15 @@ function RolesTab() {
   const rolePermsQuery = useQuery({
     queryKey: ['roles', selectedRole, 'permissions'],
     enabled: Boolean(selectedRole),
-    queryFn: async () => { const res = await api.get(`/roles/${selectedRole}/permissions`); return res.data?.data ?? {} },
+    // Normalise API shape to always return a flat string[] of permissions
+    queryFn: async () => {
+      const res  = await api.get(`/roles/${selectedRole}/permissions`)
+      const data = res.data?.data
+      if (!data) return []
+      if (Array.isArray(data)) return data
+      if (Array.isArray(data.permissions)) return data.permissions
+      return []
+    },
     staleTime: 30_000,
   })
 
@@ -651,7 +659,7 @@ function RolesTab() {
               ) : (
                 <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
                   {Object.entries(
-                    (rolePermsQuery.data?.permissions ?? []).reduce((acc, p) => {
+                    (rolePermsQuery.data ?? []).reduce((acc, p) => {
                       const mod = p.split('.')[0]
                       ;(acc[mod] = acc[mod] ?? []).push(p)
                       return acc
@@ -670,7 +678,7 @@ function RolesTab() {
                       </div>
                     </div>
                   ))}
-                  {(rolePermsQuery.data?.permissions ?? []).length === 0 && (
+                  {(rolePermsQuery.data ?? []).length === 0 && (
                     <p style={{ fontSize:13,color:'#8A9AB5' }}>No specific permissions — this role has minimal access.</p>
                   )}
                 </div>
@@ -722,13 +730,6 @@ function PermissionsTab({ isSuperAdmin }) {
     setDirty(false)
   }, [])
 
-  // Sync whenever query succeeds
-  useMemo(() => {
-    if (rolePermsQuery.data && !dirty) {
-      setLocalPerms(new Set(rolePermsQuery.data))
-    }
-  }, [rolePermsQuery.data])
-
   const syncMutation = useMutation({
     mutationFn: ({ role, permissions }) => api.put(`/roles/${role}/permissions`, { permissions }),
     onSuccess: () => {
@@ -751,7 +752,11 @@ function PermissionsTab({ isSuperAdmin }) {
   }
 
   const roles    = rolesQuery.data ?? []
-  const grouped  = permsQuery.data?.grouped ?? {}
+  // Support both { grouped: {module: string[]} } and {module: string[]} API shapes
+  const rawPermGroups = permsQuery.data ?? {}
+  const grouped       = rawPermGroups.grouped && typeof rawPermGroups.grouped === 'object'
+    ? rawPermGroups.grouped
+    : rawPermGroups
   const isLocked = selectedRole === 'super-admin'
 
   return (

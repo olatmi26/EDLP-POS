@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -29,21 +30,63 @@ class RolePermissionController extends Controller
     {
         $roles = Role::with('permissions')->where('guard_name', 'sanctum')
             ->withCount('permissions')
-            ->withCount('users')
             ->orderBy('name')
             ->get()
-            ->map(fn ($r) => [
-                'id'               => $r->id,
-                'name'             => $r->name,
-                'permissions_count'=> $r->permissions_count,
-                'users_count'      => $r->users_count,
-                'permissions'      => $r->whenLoaded('permissions', fn() => $r->permissions->map(fn($p) => [
-                        'id'   => $p->id,
-                        'name' => $p->name,
-                    ])),
-            ]);
+            ->map(function ($r) {
+                // Avoid using the Spatie "users" relation, which relies on a user
+                // model class that is currently resolving to null and causing
+                // "Class name must be a valid object or a string" errors.
+                $usersCount = DB::table('model_has_roles')
+                    ->where('role_id', $r->id)
+                    ->count();
+
+                return [
+                    'id'                => $r->id,
+                    'name'              => $r->name,
+                    'permissions_count' => $r->permissions_count,
+                    'users_count'       => $usersCount,
+                    'permissions'       => $r->relationLoaded('permissions')
+                        ? $r->permissions->map(fn ($p) => [
+                            'id'   => $p->id,
+                            'name' => $p->name,
+                        ])->values()
+                        : [],
+                ];
+            });
 
         return $this->success($roles);
+    }
+
+    /**
+     * POST /api/roles
+     * Create a new role for both sanctum and web guards.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name'        => 'required|string|max:190',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        // Ensure name is slug-like
+        $name = str_replace(' ', '-', strtolower($data['name']));
+
+        // Create sanctum role if not exists
+        $sanctum = Role::firstOrCreate([
+            'name'       => $name,
+            'guard_name' => 'sanctum',
+        ]);
+
+        // Mirror in web guard for consistency
+        Role::firstOrCreate([
+            'name'       => $name,
+            'guard_name' => 'web',
+        ]);
+
+        return $this->created([
+            'id'   => $sanctum->id,
+            'name' => $sanctum->name,
+        ], 'Role created.');
     }
 
     /**
@@ -54,10 +97,16 @@ class RolePermissionController extends Controller
     {
         $role = Role::where('name', $roleName)
             ->where('guard_name', 'sanctum')
-            ->firstOrFail();
+            ->first();
+
+        // Prefer sanctum role; if missing, fall back to web guard
+        if (! $role) {
+            $role = Role::where('name', $roleName)
+                ->where('guard_name', 'web')
+                ->firstOrFail();
+        }
 
         $granted = $role->permissions()
-            ->where('guard_name', 'sanctum')
             ->pluck('name')
             ->values();
 
@@ -127,29 +176,62 @@ class RolePermissionController extends Controller
     public function allPermissions(Request $request): JsonResponse
     {
         $isSuperAdmin = $request->user()?->hasRole('super-admin');
-        $permissions = Permission::all()->where('guard_name', 'sanctum')->groupBy(fn($p) => explode('.', $p->name)[0]) 
-        ->map(fn($group) => $group->map(fn($p) => [
-            'id'   => $p->id,
-            'name' => $p->name,
-        ])->values());
-        
-          
 
-        // Group by module prefix (e.g. "products.view" → group "products")
-        $grouped = [];
-        foreach ($permissions as $perm) {
-            $parts  = explode('.', $perm, 2);
-            $module = $parts[0];
-            $grouped[$module][] = $perm;
-        }
+        // Base query: sanctum guard permissions only (mirrors web guard set)
+        $all = Permission::query()
+            ->where('guard_name', 'sanctum')
+            ->orderBy('name')
+            ->get();
 
-        // Sort modules
+        // Full permission objects grouped by module (for richer UIs, if needed)
+        $permissions = $all->groupBy(fn ($p) => explode('.', $p->name)[0])
+            ->map(fn ($group) => $group->map(fn ($p) => [
+                'id'   => $p->id,
+                'name' => $p->name,
+            ])->values());
+
+        // Simple grouped map of module => [permission name strings]
+        $grouped = $all->groupBy(fn ($p) => explode('.', $p->name)[0])
+            ->map(fn ($group) => $group
+                ->map(fn ($p) => $p->name)
+                ->values()
+            )
+            ->toArray();
+
         ksort($grouped);
 
         return $this->success([
+            'super_admin' => (bool) $isSuperAdmin,
             'permissions' => $permissions,
             'grouped'     => $grouped,
         ]);
+    }
+
+    /**
+     * POST /api/permissions
+     * Create a new permission (both sanctum and web guards).
+     */
+    public function storePermission(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'module' => 'required|string|max:100',
+            'action' => 'required|string|max:100',
+        ]);
+
+        $module = strtolower($data['module']);
+        $action = strtolower($data['action']);
+        $name   = "{$module}.{$action}";
+
+        foreach (['sanctum', 'web'] as $guard) {
+            Permission::firstOrCreate([
+                'name'       => $name,
+                'guard_name' => $guard,
+            ]);
+        }
+
+        return $this->created([
+            'name' => $name,
+        ], 'Permission created.');
     }
 
 

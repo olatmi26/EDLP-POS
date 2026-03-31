@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Http\Resources\UserResource;
+use App\Models\Sale;
 use App\Models\User;
 use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
@@ -132,5 +133,56 @@ class UserController extends Controller
         }
 
         return $this->success(new UserResource($user), $user->is_active ? 'User activated' : 'User deactivated');
+    }
+
+    /**
+     * GET /api/users/{user}/sales-stats
+     * Lightweight POS performance snapshot for cashier users.
+     */
+    public function salesStats(User $user, Request $request): JsonResponse
+    {
+        // Only admins / branch-managers / self can view
+        $auth = $request->user();
+        if (! $auth) {
+            return $this->forbidden();
+        }
+
+        $isSelf      = $auth->id === $user->id;
+        $isAdminLike = $auth->hasRole('super-admin') || $auth->hasRole('admin') || $auth->hasRole('branch-manager');
+        if (! $isSelf && ! $isAdminLike) {
+            return $this->forbidden('You are not allowed to view this cashier\'s stats.');
+        }
+
+        $base = Sale::completed()->forCashier($user->id);
+
+        $todayFrom = now()->startOfDay();
+        $todayTo   = now()->endOfDay();
+
+        $weekFrom = now()->startOfWeek();
+        $weekTo   = now()->endOfWeek();
+
+        $monthFrom = now()->startOfMonth();
+        $monthTo   = now()->endOfMonth();
+
+        $stats = [
+            'today' => [
+                'count' => (clone $base)->dateRange($todayFrom, $todayTo)->count(),
+                'total' => (clone $base)->dateRange($todayFrom, $todayTo)->sum('total_amount'),
+            ],
+            'week' => [
+                'count' => (clone $base)->dateRange($weekFrom, $weekTo)->count(),
+                'total' => (clone $base)->dateRange($weekFrom, $weekTo)->sum('total_amount'),
+            ],
+            'month' => [
+                'count' => (clone $base)->dateRange($monthFrom, $monthTo)->count(),
+                'total' => (clone $base)->dateRange($monthFrom, $monthTo)->sum('total_amount'),
+            ],
+            'lifetime' => [
+                'count' => (clone $base)->count(),
+                'total' => (clone $base)->sum('total_amount'),
+            ],
+        ];
+
+        return $this->success($stats);
     }
 }

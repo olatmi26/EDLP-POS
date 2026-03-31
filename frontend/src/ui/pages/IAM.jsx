@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api } from '../../lib/api'// your axios instance
+import { UserCog, Camera, BarChart2, Power } from "lucide-react";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmtDate = (d) => (d ? new Date(d).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" }) : "—");
@@ -15,7 +16,7 @@ const fmtDuration = (loginAt) => {
   return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
 };
 
-const ROLES = ["super-admin", "admin", "branch-manager", "cashier"];
+const ROLES = ["super-admin", "admin", "branch-manager", "accountant", "cashier"];
 const TABS = [
   { id: "users", label: "Users" },
   { id: "roles", label: "Roles" },
@@ -169,21 +170,326 @@ function Field({ label, error, children }) {
   );
 }
 
+function EditUserModal({ user, branches, onClose }) {
+  const qc = useQueryClient();
+
+  const schema = z.object({
+    name: z.string().min(2, "Name required"),
+    email: z.string().email("Valid email required"),
+    role: z.string().min(1, "Select a role"),
+    branch_id: z.string().optional().or(z.literal("")),
+    pin_login_enabled: z.boolean().optional(),
+    pin: z.string().optional().or(z.literal("")),
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: user.name || "",
+      email: user.email || "",
+      role: (typeof user.roles?.[0] === "string" ? user.roles?.[0] : user.roles?.[0]?.name) || "",
+      branch_id: user.branch?.id ? String(user.branch.id) : "",
+      pin_login_enabled: Boolean(user.pin_login_enabled),
+      pin: "",
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data) => {
+      const payload = { ...data };
+      if (!payload.pin) delete payload.pin;
+      if (!payload.branch_id) payload.branch_id = null;
+      return api.put(`/users/${user.id}`, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["iam-users"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      reset();
+      onClose();
+    },
+  });
+
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <div>
+            <div style={styles.modalTitle}>Edit User</div>
+            <div style={styles.modalSub}>Update account info and PIN access</div>
+          </div>
+          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <form
+          onSubmit={handleSubmit((d) => mutation.mutate(d))}
+          style={styles.form}
+        >
+          <div style={styles.row2}>
+            <Field label="Full Name" error={errors.name?.message}>
+              <input
+                style={styles.input}
+                placeholder="Full name"
+                {...register("name")}
+              />
+            </Field>
+            <Field label="Email Address" error={errors.email?.message}>
+              <input
+                style={styles.input}
+                type="email"
+                placeholder="Email"
+                {...register("email")}
+              />
+            </Field>
+          </div>
+
+          <div style={styles.row2}>
+            <Field label="Role" error={errors.role?.message}>
+              <select style={styles.input} {...register("role")}>
+                <option value="">Select role…</option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Branch">
+              <select style={styles.input} {...register("branch_id")}>
+                <option value="">All branches</option>
+                {(branches || []).map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <Field label="PIN Login (6 digits)">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  {...register("pin_login_enabled")}
+                />
+                <span style={{ fontSize: 13 }}>Enable PIN login</span>
+              </label>
+              {watch("pin_login_enabled") && (
+                <input
+                  style={{ ...styles.input, maxWidth: 120 }}
+                  type="password"
+                  maxLength={6}
+                  placeholder="New 6-digit PIN"
+                  {...register("pin")}
+                />
+              )}
+            </div>
+          </Field>
+
+          {mutation.isError && (
+            <div style={styles.errBox}>
+              {mutation.error?.response?.data?.message || "Failed to update user."}
+            </div>
+          )}
+
+          <div style={styles.modalFooter}>
+            <button
+              type="button"
+              style={styles.btnSecondary}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              style={styles.btnPrimary}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function UploadAvatarModal({ user, onClose }) {
+  const qc = useQueryClient();
+  const [file, setFile] = useState(null);
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const form = new FormData();
+      if (file) form.append("avatar", file);
+      return api.post(`/users/${user.id}/avatar`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["iam-users"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+      onClose();
+    },
+  });
+
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <div>
+            <div style={styles.modalTitle}>Upload Avatar</div>
+            <div style={styles.modalSub}>Update profile photo for {user.name}</div>
+          </div>
+          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (file) mutation.mutate();
+          }}
+          style={styles.form}
+        >
+          <Field label="Avatar image">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </Field>
+
+          {mutation.isError && (
+            <div style={styles.errBox}>
+              {mutation.error?.response?.data?.message || "Failed to upload avatar."}
+            </div>
+          )}
+
+          <div style={styles.modalFooter}>
+            <button
+              type="button"
+              style={styles.btnSecondary}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              style={styles.btnPrimary}
+              disabled={mutation.isPending || !file}
+            >
+              {mutation.isPending ? "Uploading…" : "Upload"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CashierStatsModal({ user, onClose }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["cashier-stats", user.id],
+    queryFn: () => api.get(`/users/${user.id}/sales-stats`).then((r) => r.data.data || r.data),
+    staleTime: 10_000,
+  });
+
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div
+        style={{
+          ...styles.modal,
+          maxWidth: 900,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={styles.modalHeader}>
+          <div>
+            <div style={styles.modalTitle}>Cashier Performance</div>
+            <div style={styles.modalSub}>Sales statistics for {user.name}</div>
+          </div>
+          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+          {isLoading && (
+            <div style={styles.emptyState}>Loading cashier stats…</div>
+          )}
+
+          {isError && !isLoading && (
+            <div style={styles.errBox}>
+              Failed to load stats. Check network or permissions.
+            </div>
+          )}
+
+          {!isLoading && !isError && data && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+                {[
+                  { key: "today", label: "Today" },
+                  { key: "week", label: "This Week" },
+                  { key: "month", label: "This Month" },
+                  { key: "lifetime", label: "Lifetime" },
+                ].map(({ key, label }) => (
+                  <div
+                    key={key}
+                    style={{
+                      padding: 14,
+                      borderRadius: 10,
+                      border: "1px solid #E5EBF2",
+                      background: "#F9FAFB",
+                    }}
+                  >
+                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "#8A9AB5", marginBottom: 6 }}>
+                      {label}
+                    </div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "#111827" }}>
+                      ₦{Number(data[key]?.total ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                      {data[key]?.count ?? 0} sales
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 function UsersTab({ onAdd, branches }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [editingUser, setEditingUser] = useState(null);
+  const [avatarUser, setAvatarUser] = useState(null);
+  const [statsUser, setStatsUser] = useState(null);
+
+  const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["iam-users"],
-    queryFn: () => api.get("/users").then((r) => r.data.data || r.data),
+    queryFn: () => api.get("/users", { params: { active_only: false, per_page: 200 } }).then((r) => r.data.data || r.data),
   });
 
   const users = (data || []).filter((u) => {
     const q = search.toLowerCase();
     const matchSearch = !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-    const matchRole = !roleFilter || u.roles?.[0]?.name === roleFilter;
+    const matchRole = !roleFilter || (typeof u.roles?.[0] === "string" ? u.roles?.[0] : u.roles?.[0]?.name) === roleFilter;
     return matchSearch && matchRole;
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (id) => api.patch(`/users/${id}/toggle-active`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["iam-users"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
   });
 
   return (
@@ -230,7 +536,7 @@ function UsersTab({ onAdd, branches }) {
             )}
             {users.map((u) => {
               const isOnline = u.is_online || false;
-              const role = u.roles?.[0]?.name || "—";
+              const role = (typeof u.roles?.[0] === "string" ? u.roles?.[0] : u.roles?.[0]?.name) || "—";
               return (
                 <tr key={u.id} style={styles.tr}>
                   <td style={styles.td}>
@@ -264,9 +570,51 @@ function UsersTab({ onAdd, branches }) {
                   </td>
                   <td style={styles.td}>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button style={styles.actionBtn}>Edit</button>
-                      <button style={{ ...styles.actionBtn, color: "#C0392B", borderColor: "#FDECEA", background: "#FDECEA" }}>
-                        Disable
+                      {/* Edit */}
+                      <button
+                        type="button"
+                        style={styles.iconBtn}
+                        title="Edit user"
+                        onClick={() => setEditingUser(u)}
+                      >
+                        <UserCog size={14} />
+                      </button>
+
+                      {/* Avatar */}
+                      <button
+                        type="button"
+                        style={styles.iconBtn}
+                        title="Upload avatar"
+                        onClick={() => setAvatarUser(u)}
+                      >
+                        <Camera size={14} />
+                      </button>
+
+                      {/* Cashier stats */}
+                      {role === "cashier" && (
+                        <button
+                          type="button"
+                          style={styles.iconBtn}
+                          title="View cashier sales stats"
+                          onClick={() => setStatsUser(u)}
+                        >
+                          <BarChart2 size={14} />
+                        </button>
+                      )}
+
+                      {/* Activate / Deactivate */}
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.iconBtn,
+                          color: u.is_active ? "#C0392B" : "#1A6E3A",
+                          borderColor: u.is_active ? "#FDECEA" : "#EAF5EE",
+                          background: u.is_active ? "#FDECEA" : "#EAF5EE",
+                        }}
+                        title={u.is_active ? "Deactivate" : "Activate"}
+                        onClick={() => toggleActiveMutation.mutate(u.id)}
+                      >
+                        <Power size={14} />
                       </button>
                     </div>
                   </td>
@@ -276,32 +624,93 @@ function UsersTab({ onAdd, branches }) {
           </tbody>
         </table>
       </div>
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          branches={branches}
+          onClose={() => setEditingUser(null)}
+        />
+      )}
+      {avatarUser && (
+        <UploadAvatarModal
+          user={avatarUser}
+          onClose={() => setAvatarUser(null)}
+        />
+      )}
+      {statsUser && (
+        <CashierStatsModal
+          user={statsUser}
+          onClose={() => setStatsUser(null)}
+        />
+      )}
     </div>
   );
 }
 
 function RolesTab() {
-  const { data, isLoading, isError } = useQuery({
+  const [page, setPage] = useState(1)
+  const pageSize = 4
+  const [showAddRole, setShowAddRole] = useState(false)
+  const [roleSearch, setRoleSearch] = useState("")
+
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["iam-roles"],
     queryFn: () => api.get("/roles").then((r) => r.data.data || r.data),
     retry: 1,
   });
 
   if (isLoading) return <div style={styles.emptyState}>Loading roles…</div>;
-  if (isError) return (
-    <div style={styles.errorBox}>
-      Failed to load roles. Check that <code>GET /api/roles</code> returns data and your Sanctum token is attached.
-    </div>
-  );
+  if (isError) {
+    const status = error?.response?.status
+    const backendMessage = error?.response?.data?.message
+    const hint =
+      status === 403
+        ? "Your account needs role `admin`, `super-admin`, or `branch-manager` to view roles/permissions."
+        : "Check that `GET /api/roles` returns data and your auth token is attached.";
+
+    return (
+      <div style={styles.errorBox}>
+        Failed to load roles. {hint}
+        {backendMessage ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.95 }}>{backendMessage}</div> : null}
+      </div>
+    );
+  }
 
   const roles = data || [];
+  const filteredRoles = roles.filter((r) =>
+    r.name.toLowerCase().includes(roleSearch.toLowerCase())
+  );
+  const totalPages = Math.max(1, Math.ceil(filteredRoles.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pagedRoles = filteredRoles.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+          <input
+            style={{ ...styles.input, maxWidth: 260 }}
+            placeholder="Search roles…"
+            value={roleSearch}
+            onChange={(e) => { setRoleSearch(e.target.value); setPage(1); }}
+          />
+          <span style={{ fontSize: 13, color: "#8A9AB5" }}>
+            {filteredRoles.length} roles
+          </span>
+        </div>
+        <button
+          type="button"
+          style={styles.btnPrimary}
+          onClick={() => setShowAddRole(true)}
+        >
+          + Add Role
+        </button>
+      </div>
+
       {roles.length === 0 && (
-        <div style={styles.emptyState}>No roles found. Run <code>php artisan db:seed --class=RoleSeeder</code></div>
+        <div style={styles.emptyState}>No roles found. Run <code>php artisan db:seed --class=RoleSeeder</code> or add a role.</div>
       )}
-      {roles.map((role) => (
+      {pagedRoles.map((role) => (
         <div key={role.id} style={styles.roleCard}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
@@ -326,60 +735,343 @@ function RolesTab() {
           </div>
         </div>
       ))}
+      {totalPages > 1 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            style={styles.btnSecondary}
+            disabled={currentPage === 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Prev
+          </button>
+          <span style={{ fontSize: 12, color: "#8A9AB5" }}>
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            style={styles.btnSecondary}
+            disabled={currentPage === totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {showAddRole && (
+        <AddRoleModal onClose={() => setShowAddRole(false)} />
+      )}
     </div>
   );
 }
 
 function PermissionsTab({ authUser }) {
-  const isSuperAdmin = authUser?.roles?.some((r) => r.name === "super-admin");
+  const queryClient = useQueryClient()
+  const [selectedRole, setSelectedRole] = useState(null)
+  const [localPerms, setLocalPerms] = useState(null) // Set<string>
+  const [dirty, setDirty] = useState(false)
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["iam-permissions"],
-    queryFn: () => api.get("/permissions").then((r) => r.data),
-    retry: 1,
+  const isSuperAdmin = authUser?.roles?.some((r) => (typeof r === "string" ? r : r?.name) === "super-admin");
+
+  const rolesQuery = useQuery({
+    queryKey: ["iam-roles"],
+    queryFn: () => api.get("/roles").then((r) => r.data.data || r.data),
+    staleTime: 60_000,
   });
 
-  if (isLoading) return <div style={styles.emptyState}>Loading permissions…</div>;
-  if (isError) return (
-    <div style={styles.errorBox}>
-      Failed to load permissions. Check <code>GET /api/permissions</code> and ensure you are authenticated as Super Admin.
-    </div>
-  );
+  const permsQuery = useQuery({
+    queryKey: ["iam-permissions-all"],
+    queryFn: () => api.get("/permissions").then((r) => r.data.data || r.data),
+    staleTime: 300_000,
+  });
 
-  const canEdit = data?.can_edit ?? isSuperAdmin;
-  const groups = data?.permissions || data || {};
+  const rolePermsQuery = useQuery({
+    queryKey: ["iam-role-permissions", selectedRole],
+    enabled: Boolean(selectedRole),
+    queryFn: async () => {
+      const r = await api.get(`/roles/${selectedRole}/permissions`)
+      const payload = r.data.data || r.data
+      if (Array.isArray(payload)) return payload
+      return payload?.permissions ?? []
+    },
+    staleTime: 30_000,
+    onSuccess: (perms) => {
+      setLocalPerms(new Set(perms))
+      setDirty(false)
+    },
+  })
+
+  const [saveError, setSaveError] = useState(null)
+  const syncMutation = useMutation({
+    mutationFn: ({ role, permissions }) => api.put(`/roles/${role}/permissions`, { permissions }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["iam-role-permissions", selectedRole] })
+      setDirty(false)
+      setSaveError(null)
+    },
+    onError: (e) => setSaveError(e?.response?.data?.message ?? "Save failed"),
+  })
+
+  const grouped = permsQuery.data?.grouped ?? {}
+  const isLocked = selectedRole === "super-admin"
+  const canEdit = Boolean(isSuperAdmin && !isLocked)
+
+  function togglePerm(perm) {
+    if (!canEdit) return
+    setLocalPerms((prev) => {
+      const next = new Set(prev ?? [])
+      next.has(perm) ? next.delete(perm) : next.add(perm)
+      return next
+    })
+    setDirty(true)
+  }
+
+  if (rolesQuery.isLoading || permsQuery.isLoading) {
+    return <div style={styles.emptyState}>Loading permissions…</div>
+  }
+
+  if (rolesQuery.isError) {
+    const status = rolesQuery.error?.response?.status
+    const backendMessage = rolesQuery.error?.response?.data?.message
+    return (
+      <div style={styles.errorBox}>
+        Failed to load roles. {status === 403 ? "Not allowed to view roles." : "Please try again."}
+        {backendMessage ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.95 }}>{backendMessage}</div> : null}
+      </div>
+    )
+  }
+
+  if (permsQuery.isError) {
+    const status = permsQuery.error?.response?.status
+    const backendMessage = permsQuery.error?.response?.data?.message
+    return (
+      <div style={styles.errorBox}>
+        Failed to load permission definitions. {status === 403 ? "Not allowed to view permissions." : "Please try again."}
+        {backendMessage ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.95 }}>{backendMessage}</div> : null}
+      </div>
+    )
+  }
+
+  const roles = rolesQuery.data ?? []
 
   return (
     <div>
-      {!canEdit && (
+      {!isSuperAdmin && (
         <div style={styles.infoBox}>
           🔒 Only Super Admin can modify role permissions. You can view but not edit.
         </div>
       )}
-      {canEdit && (
+      {isSuperAdmin && !isLocked && (
         <div style={{ ...styles.infoBox, background: "#EAF5EE", borderColor: "#1A6E3A", color: "#1A6E3A" }}>
-          ✅ You have full permission management access as Super Admin.
+          ✅ You can edit role permissions.
+        </div>
+      )}
+      {isLocked && (
+        <div style={styles.infoBox}>
+          ⚑ Super Admin permissions are managed automatically (read-only).
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
-        {Object.entries(groups).map(([group, perms]) => (
-          <div key={group} style={styles.roleCard}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".6px", color: "#8A9AB5", marginBottom: 10 }}>
-              {group}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 8 }}>
-              {(Array.isArray(perms) ? perms : []).map((perm) => (
-                <div key={perm.id || perm} style={styles.permRow}>
-                  <span style={styles.permChip}>{perm.name || perm}</span>
-                  {canEdit && (
-                    <button style={styles.actionBtn}>Manage</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Role selector */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+        {roles.map((r) => (
+          <button
+            key={r.name}
+            type="button"
+            onClick={() => {
+              setSelectedRole(r.name)
+              setLocalPerms(null)
+              setDirty(false)
+              setSaveError(null)
+            }}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              border: `2px solid ${selectedRole === r.name ? "#1A6E3A" : "#D0DAE8"}`,
+              background: selectedRole === r.name ? "#EAF5EE" : "#fff",
+              color: selectedRole === r.name ? "#1A6E3A" : "#3A4A5C",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {r.name}
+          </button>
         ))}
+      </div>
+
+      {!selectedRole ? (
+        <div style={{ ...styles.emptyState, padding: "24px 20px" }}>
+          Select a role to view its current permissions.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#0A1628" }}>
+              Editing: <span style={{ color: "#1A3FA6" }}>{selectedRole}</span>
+            </div>
+            <div style={{ fontSize: 12, color: "#8A9AB5" }}>
+              {rolePermsQuery.isLoading || !localPerms ? "Loading current grants…" : `${localPerms.size} permissions granted`}
+            </div>
+            {canEdit && dirty && (
+              <button
+                type="button"
+                style={styles.btnPrimary}
+                disabled={syncMutation.isPending}
+                onClick={() => {
+                  if (!localPerms) return
+                  syncMutation.mutate({ role: selectedRole, permissions: [...localPerms] })
+                }}
+              >
+                {syncMutation.isPending ? "Saving…" : "Save Changes"}
+              </button>
+            )}
+          </div>
+
+          {saveError && (
+            <div style={{ ...styles.errorBox, marginTop: 12, fontSize: 12 }}>
+              {saveError}
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 16 }}>
+            {rolePermsQuery.isLoading && (
+              <div style={styles.emptyState}>Loading permission matrix…</div>
+            )}
+            {!rolePermsQuery.isLoading && !localPerms && (
+              <div style={styles.emptyState}>No permissions found for this role.</div>
+            )}
+            {!rolePermsQuery.isLoading && localPerms && (
+              Object.entries(grouped)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([module, perms]) => (
+                  <div key={module} style={styles.roleCard}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".6px", color: "#8A9AB5", marginBottom: 10 }}>
+                      {module}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {(Array.isArray(perms) ? perms : []).map((perm) => {
+                        const granted = isLocked || localPerms.has(perm)
+                        const action = String(perm).split(".").slice(1).join(".") || perm
+                        return (
+                          <button
+                            key={perm}
+                            type="button"
+                            disabled={!canEdit}
+                            onClick={() => togglePerm(perm)}
+                            style={{
+                              padding: "7px 10px",
+                              borderRadius: 10,
+                              border: `1px solid ${granted ? "#1A6E3A" : "#D0DAE8"}`,
+                              background: granted ? "#EAF5EE" : "#F4F6FA",
+                              color: granted ? "#1A6E3A" : "#3A4A5C",
+                              cursor: canEdit ? "pointer" : "not-allowed",
+                              fontSize: 11,
+                              fontWeight: 800,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span style={{ fontSize: 12 }}>{granted ? "✓" : "×"}</span>
+                            <span>{action}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function AddRoleModal({ onClose }) {
+  const qc = useQueryClient();
+
+  const schema = z.object({
+    name: z.string().min(2, "Role name required"),
+    description: z.string().optional().or(z.literal("")),
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "", description: "" },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.post("/roles", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["iam-roles"] });
+      reset();
+      onClose();
+    },
+  });
+
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <div>
+            <div style={styles.modalTitle}>Add New Role</div>
+            <div style={styles.modalSub}>Define a new access role for IAM</div>
+          </div>
+          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <form
+          onSubmit={handleSubmit((d) => mutation.mutate(d))}
+          style={styles.form}
+        >
+          <Field label="Role Name (slug)" error={errors.name?.message}>
+            <input
+              style={styles.input}
+              placeholder="e.g. warehouse-manager"
+              {...register("name")}
+            />
+          </Field>
+
+          <Field label="Description" error={errors.description?.message}>
+            <textarea
+              style={{ ...styles.input, minHeight: 60, resize: "vertical" }}
+              placeholder="Short description of what this role can do"
+              {...register("description")}
+            />
+          </Field>
+
+          {mutation.isError && (
+            <div style={styles.errBox}>
+              {mutation.error?.response?.data?.message || "Failed to create role."}
+            </div>
+          )}
+
+          <div style={styles.modalFooter}>
+            <button
+              type="button"
+              style={styles.btnSecondary}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              style={styles.btnPrimary}
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? "Creating…" : "Create Role"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -433,9 +1125,7 @@ export  function IAMPage() {
 
       {/* Tab content */}
       <div style={styles.tabContent}>
-        {activeTab === "users" && (
-          <UsersTab onAdd={() => setShowAddUser(true)} branches={branches} />
-        )}
+        {activeTab === "users" && <UsersTab onAdd={() => setShowAddUser(true)} branches={branches} />}
         {activeTab === "roles" && <RolesTab />}
         {activeTab === "permissions" && <PermissionsTab authUser={authUser} />}
       </div>
@@ -451,7 +1141,7 @@ export  function IAMPage() {
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = {
-  page: { padding: "28px 32px", maxWidth: 1200, margin: "0 auto" },
+  page: { padding: "20px 24px 28px", maxWidth: "100%", margin: 0 },
   breadcrumb: { display: "flex", alignItems: "center", gap: 6, marginBottom: 16, fontSize: 12 },
   breadcrumbItem: { color: "#8A9AB5", fontWeight: 500 },
   breadcrumbSep: { color: "#CBD5E1" },
@@ -466,9 +1156,11 @@ const styles = {
     marginBottom: 24, paddingBottom: 0,
   },
   tabBtn: {
-    padding: "9px 20px", fontSize: 13, fontWeight: 600, border: "none",
+    padding: "9px 20px", fontSize: 13, fontWeight: 600,
     background: "transparent", color: "#8A9AB5", cursor: "pointer",
-    borderBottom: "2px solid transparent", marginBottom: -1.5,
+    border: "none",
+    borderBottomWidth: 2, borderBottomStyle: "solid", borderBottomColor: "transparent",
+    marginBottom: -1.5,
     borderRadius: "6px 6px 0 0", transition: "all .15s",
   },
   tabBtnActive: { color: "#0A1628", borderBottomColor: "#E8A020", background: "#FFFDF7" },
@@ -518,6 +1210,13 @@ const styles = {
     padding: "4px 12px", fontSize: 11, fontWeight: 600,
     background: "#F4F6FA", color: "#3A4A5C",
     border: "1px solid #D0DAE8", borderRadius: 5, cursor: "pointer",
+  },
+  iconBtn: {
+    width: 30, height: 30, borderRadius: 6,
+    border: "1px solid #D0DAE8",
+    background: "#F4F6FA",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    cursor: "pointer", color: "#3A4A5C",
   },
 
   overlay: {

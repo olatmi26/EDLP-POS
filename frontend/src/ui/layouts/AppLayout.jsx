@@ -41,12 +41,11 @@ const NAV_GROUPS = [
     label: 'Administration',
     items: [
       { to:'/approvals',       icon:AlertCircle, label:'Approvals' },
-      { to:'/users',           icon:UserCog,     label:'Users & Roles' },
+      { to:'/users',           icon:UserCog,     label:'Identity & Access' },
       { to:'/branches',        icon:Building2,   label:'Branches' },
       { to:'/accounting',      icon:BookOpen,    label:'Accounting' },
       { to:'/workflow-config', icon:GitBranch,   label:'Workflow Config' },
       { to:'/settings',        icon:Settings,    label:'Settings' },
-      { to:'/Profile', icon:Users, label:'Profile / IAM' },
     ],
   },
 ]
@@ -122,6 +121,7 @@ export function AppLayout() {
     : '?'
 
   const pendingCount = pendingCountQuery.data ?? 0
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background:'var(--edlp-bg)' }}>
@@ -210,21 +210,6 @@ export function AppLayout() {
             {sidebarOpen ? <X size={18}/> : <Menu size={18}/>}
           </button>
 
-          {/* Branch selector */}
-          {isAdminLike && (
-            <div style={{ display:'flex',alignItems:'center',gap:8 }}>
-              <span style={{ fontSize:12,color:'var(--edlp-text-light)' }}>Branch:</span>
-              <select value={user?.branch?.id ?? ''}
-                onChange={(e) => switchBranchMutation.mutate(Number(e.target.value))}
-                disabled={branchesQuery.isLoading || switchBranchMutation.isPending}
-                style={{ fontSize:12,border:'1px solid #D5DFE9',borderRadius:6,padding:'4px 8px',color:'var(--edlp-text)',outline:'none',cursor:'pointer',background:'#fff' }}>
-                <option value="" disabled>Select…</option>
-                {(branchesQuery.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              {switchBranchMutation.isPending && <RefreshCw size={14} style={{ animation:'spin 0.7s linear infinite' }} color="#8A9AB5" />}
-            </div>
-          )}
-
           <div style={{ flex:1 }} />
 
           {/* Approvals bell badge */}
@@ -241,11 +226,53 @@ export function AppLayout() {
             <Bell size={18}/>
           </button>
 
-          <div style={{ display:'flex',alignItems:'center',gap:8,padding:'4px 10px',borderRadius:20,border:'1px solid #E5EBF2',cursor:'pointer' }}>
-            <div style={{ width:26,height:26,borderRadius:'50%',background:'var(--edlp-primary)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--edlp-navy)',fontSize:10,fontWeight:700 }}>
-              {initials}
-            </div>
-            <span style={{ fontSize:12,fontWeight:600,color:'var(--edlp-text)' }}>{user?.name?.split(' ')[0] ?? 'User'}</span>
+          <div style={{ position:'relative' }}>
+            <button
+              onClick={() => setUserMenuOpen(v => !v)}
+              style={{ display:'flex',alignItems:'center',gap:8,padding:'4px 10px',borderRadius:20,border:'1px solid #E5EBF2',cursor:'pointer',background:'#fff' }}
+            >
+              <div style={{ width:26,height:26,borderRadius:'50%',background:'var(--edlp-primary)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--edlp-navy)',fontSize:10,fontWeight:700 }}>
+                {initials}
+              </div>
+              <span style={{ fontSize:12,fontWeight:600,color:'var(--edlp-text)' }}>{user?.name?.split(' ')[0] ?? 'User'}</span>
+            </button>
+
+            {userMenuOpen && (
+              <div style={{ position:'absolute',right:0,top:40,background:'#fff',border:'1px solid #E5EBF2',borderRadius:10,boxShadow:'0 10px 30px rgba(15,23,42,0.12)',minWidth:220,zIndex:50,padding:10 }}>
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:13,fontWeight:600,color:'var(--edlp-text)' }}>{user?.name ?? 'User'}</div>
+                  <div style={{ fontSize:11,color:'#8A9AB5' }}>{user?.email}</div>
+                </div>
+
+                {isAdminLike && (
+                  <div style={{ marginTop:6,paddingTop:6,borderTop:'1px solid #F1F5F9' }}>
+                    <div style={{ fontSize:11,color:'#8A9AB5',marginBottom:4 }}>Branch</div>
+                    <div style={{ display:'flex',alignItems:'center',gap:6 }}>
+                      <select
+                        value={user?.branch?.id ?? ''}
+                        onChange={(e) => {
+                          setUserMenuOpen(false)
+                          switchBranchMutation.mutate(Number(e.target.value))
+                        }}
+                        disabled={branchesQuery.isLoading || switchBranchMutation.isPending}
+                        style={{ flex:1,fontSize:12,border:'1px solid #D5DFE9',borderRadius:6,padding:'4px 8px',color:'var(--edlp-text)',outline:'none',cursor:'pointer',background:'#fff' }}
+                      >
+                        <option value="" disabled>Select…</option>
+                        {(branchesQuery.data ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                      {switchBranchMutation.isPending && <RefreshCw size={14} style={{ animation:'spin 0.7s linear infinite' }} color="#8A9AB5" />}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={logout}
+                  style={{ marginTop:8,width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:12,fontWeight:600,border:'1px solid #FDECEA',background:'#FDECEA',color:'#C0392B',borderRadius:8,padding:'6px 10px',cursor:'pointer' }}
+                >
+                  <LogOut size={14} /> Logout
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

@@ -84,6 +84,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
     Route::delete('products/{product}', [ProductController::class, 'destroy'])
         ->middleware('permission:products.delete');
 
+    // ── Categories ────────────────────────────────────────────────────────────────
+    Route::get('categories', function (\Illuminate\Http\Request $request) {
+        $cats = \App\Models\Category::where('is_active', true)->orderBy('name')->get(['id','name','slug']);
+        return response()->json(['success' => true, 'data' => $cats]);
+    })->middleware('permission:products.view');
+
     // ── Inventory ─────────────────────────────────────────────────────────────
     Route::get('inventory', [InventoryController::class, 'index'])
         ->middleware('permission:inventory.view');
@@ -112,15 +118,18 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
     Route::post('users/{user}/avatar',         [UserController::class, 'uploadAvatar']);
     Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword']);
     Route::patch('users/{user}/toggle-active', [UserController::class, 'toggleActive']);
+    Route::get('users/{user}/sales-stats',     [UserController::class, 'salesStats']);
     Route::apiResource('users', UserController::class);
 
     // ── Roles & Permissions ───────────────────────────────────────────────────
-    // Read: admin or super-admin; Write (sync): super-admin only (enforced in controller)
-    Route::middleware('role:super-admin|admin')->group(function () {
+    // Read: super-admin/admin/branch-manager; Write (sync): super-admin only (enforced in controller)
+    Route::middleware('role:super-admin|admin|branch-manager')->group(function () {
         Route::get('roles',                              [RolePermissionController::class, 'index']);
+        Route::post('roles',                             [RolePermissionController::class, 'store']);
         Route::get('roles/{role}/permissions',           [RolePermissionController::class, 'rolePermissions']);
         Route::put('roles/{role}/permissions',           [RolePermissionController::class, 'syncRolePermissions']);
         Route::get('permissions',                        [RolePermissionController::class, 'allPermissions']);
+        Route::post('permissions',                       [RolePermissionController::class, 'storePermission']);
     });
 
     // ── Suppliers & Purchase Orders ───────────────────────────────────────────
