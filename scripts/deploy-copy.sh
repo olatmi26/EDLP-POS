@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
-# EDLP POS — Deploy Pipeline v2.0 (Optimized & Fixed)
-# =============================================================================
+# EDLP POS — Deploy Pipeline
+# scripts/deploy.sh [ZIP_PATH_OR_NAME] [OPTIONS]
+#
 # Full automation pipeline:
 #   1. Locate & extract the zip (from Windows Downloads or given path)
-#   2. Detect content type (laravel | react | fullstack)
-#   3. Mount into monorepo (smart file merge — never blindly overwrites)
-#   4. Run QA gates (laravel_qa_check + react_qa_check)
-#   5. Git commit → push (conventional commit, auto branch, remote sync)
+#   2. Detect content type  (laravel | react | fullstack)
+#   3. Mount into monorepo  (smart file merge — never blindly overwrites)
+#   4. Run QA gates         (laravel_qa_check + react_qa_check)
+#   5. Git commit → push    (conventional commit, auto branch, remote sync)
 #
 # Usage:
 #   ./scripts/deploy.sh                                # auto-find latest zip in Downloads
 #   ./scripts/deploy.sh sprint3_laravel.zip            # by filename only (searches Downloads)
-#   ./scripts/deploy.sh /path/to/file.zip              # full path
+#   ./scripts/deploy.sh /mnt/c/Users/.../file.zip      # full path
 #   ./scripts/deploy.sh sprint3.zip --dry-run          # preview without touching files
 #   ./scripts/deploy.sh sprint3.zip --no-qa            # skip QA (dangerous — use rarely)
 #   ./scripts/deploy.sh sprint3.zip --no-git           # skip git commit/push
@@ -21,10 +22,17 @@
 #   ./scripts/deploy.sh sprint3.zip --react-only       # mount + QA React only
 #   ./scripts/deploy.sh sprint3.zip --laravel-only     # mount + QA Laravel only
 #   ./scripts/deploy.sh sprint3.zip --message "feat: add pos receipt module"
+#
+# Project layout expected:
+#   /mnt/c/mydocs/edlp-pos/        ← PROJECT_ROOT (Laravel lives here)
+#   /mnt/c/mydocs/edlp-pos/frontend/  ← React lives here
+#   /mnt/c/mydocs/edlp-pos/scripts/   ← this script lives here
+#
+# Windows Downloads folder (auto-searched):
+#   /mnt/c/Users/olaiya.hassan/Downloads/
 # =============================================================================
 
 set -euo pipefail
-shopt -s nullglob
 
 # ── Resolve absolute paths ────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,7 +56,6 @@ CUSTOM_MESSAGE=""
 QA_FIX=false
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
-ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --dry-run)      DRY_RUN=true ;;
@@ -59,32 +66,24 @@ for arg in "$@"; do
     --laravel-only) LARAVEL_ONLY=true ;;
     --qa-fix)       QA_FIX=true ;;
     --branch=*)     CUSTOM_BRANCH="${arg#--branch=}" ;;
+    --branch)       ;;
     --message=*)    CUSTOM_MESSAGE="${arg#--message=}" ;;
+    --message)      ;;
     --help|-h)
       sed -n '3,30p' "$0" | sed 's/^# *//'
       exit 0
       ;;
-    *)
-      ARGS+=("$arg")
-      ;;
   esac
 done
 
-# Handle positional arguments (first non-flag is the zip path)
-if [ ${#ARGS[@]} -gt 0 ]; then
-  ZIP_INPUT="${ARGS[0]}"
-fi
-
-# Handle --branch and --message as next-arg style
-for ((i=1; i<=$#; i++)); do
-  if [ "${!i}" = "--branch" ] && [ $((i+1)) -le $# ]; then
-    next_idx=$((i+1))
-    CUSTOM_BRANCH="${!next_idx}"
-  fi
-  if [ "${!i}" = "--message" ] && [ $((i+1)) -le $# ]; then
-    next_idx=$((i+1))
-    CUSTOM_MESSAGE="${!next_idx}"
-  fi
+# Handle --branch and --message as next-arg style too
+PREV=""
+for arg in "$@"; do
+  case "$PREV" in
+    --branch)  CUSTOM_BRANCH="$arg" ;;
+    --message) CUSTOM_MESSAGE="$arg" ;;
+  esac
+  PREV="$arg"
 done
 
 # ── Colors ────────────────────────────────────────────────────────────────────
@@ -104,16 +103,16 @@ log_raw()   { echo -e "$1" | tee -a "$LOG_FILE"; }
 log_step()  { echo -e "\n${BLUE}${BOLD}▶ $1${NC}" | tee -a "$LOG_FILE"; }
 log_ok()    { echo -e "  ${GREEN}✓${NC}  $1" | tee -a "$LOG_FILE"; }
 log_warn()  { echo -e "  ${YELLOW}!${NC}  $1" | tee -a "$LOG_FILE"; }
-log_error() { echo -e "  ${RED}✗${NC}  $1" | tee -a "$LOG_FILE"; exit 1; }
+log_error() { echo -e "  ${RED}✗${NC}  $1" | tee -a "$LOG_FILE"; }
 log_info()  { echo -e "  ${DIM}·${NC}  $1" | tee -a "$LOG_FILE"; }
-log_dry()   { [ "$DRY_RUN" = true ] && echo -e "  ${MAGENTA}[DRY]${NC} $1" | tee -a "$LOG_FILE"; }
+log_dry()   { echo -e "  ${MAGENTA}[DRY]${NC} $1" | tee -a "$LOG_FILE"; }
 
 # ── Cleanup on exit ───────────────────────────────────────────────────────────
 cleanup() {
   local exit_code=$?
   [ -d "$WORK_DIR" ] && rm -rf "$WORK_DIR"
   if [ "$exit_code" -ne 0 ]; then
-    log_error "Pipeline aborted (exit $exit_code). Check $LOG_FILE for details." >&2
+    log_error "Pipeline aborted (exit $exit_code). Check $LOG_FILE for details."
   fi
 }
 trap cleanup EXIT
@@ -127,7 +126,7 @@ echo "════════════════════════�
 
 echo ""
 echo -e "${BOLD}╔════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║        EDLP POS — Deploy Pipeline v2.0                ║${NC}"
+echo -e "${BOLD}║        EDLP POS — Deploy Pipeline v1.0                ║${NC}"
 echo -e "${BOLD}╚════════════════════════════════════════════════════════╝${NC}"
 echo -e "  Project:   ${CYAN}$PROJECT_ROOT${NC}"
 echo -e "  Frontend:  ${CYAN}$FRONTEND_ROOT${NC}"
@@ -147,34 +146,41 @@ ZIP_PATH=""
 # If no argument given — find the newest .zip in Downloads
 if [ -z "$ZIP_INPUT" ]; then
   log_info "No zip specified — scanning $WINDOWS_DOWNLOADS for latest..."
-  if [ -d "$WINDOWS_DOWNLOADS" ]; then
-    ZIP_PATH=$(find "$WINDOWS_DOWNLOADS" -maxdepth 1 -name "*.zip" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
-  else
-    log_warn "Windows Downloads folder not found: $WINDOWS_DOWNLOADS"
-    ZIP_PATH=$(ls -t *.zip 2>/dev/null | head -1 || true)
+  ZIP_PATH=$(find "$WINDOWS_DOWNLOADS" -maxdepth 1 -name "*.zip" -newer "$WINDOWS_DOWNLOADS" \
+    2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)
+
+  # Fallback: just newest zip
+  if [ -z "$ZIP_PATH" ]; then
+    ZIP_PATH=$(ls -t "$WINDOWS_DOWNLOADS"/*.zip 2>/dev/null | head -1 || true)
   fi
 
   if [ -z "$ZIP_PATH" ]; then
-    log_error "No .zip files found"
+    log_error "No .zip files found in $WINDOWS_DOWNLOADS"
+    log_info "Usage: ./scripts/deploy.sh my_sprint.zip"
+    exit 1
   fi
-  log_ok "Auto-selected: $(basename "$ZIP_PATH")"
+  log_ok "Auto-selected: $(basename "$ZIP_PATH") (newest in Downloads)"
 
 elif [[ "$ZIP_INPUT" == *.zip && "$ZIP_INPUT" != /* && "$ZIP_INPUT" != ./* ]]; then
   # Filename only — search Downloads
   ZIP_PATH="$WINDOWS_DOWNLOADS/$ZIP_INPUT"
   if [ ! -f "$ZIP_PATH" ]; then
-    ZIP_PATH=$(find "$WINDOWS_DOWNLOADS" -name "$ZIP_INPUT" -type f 2>/dev/null | head -1)
+    # Also search QAChecks folder mentioned in your Downloads
+    ZIP_PATH=$(find "$WINDOWS_DOWNLOADS" -maxdepth 2 -name "$ZIP_INPUT" 2>/dev/null | head -1 || true)
   fi
   if [ -z "$ZIP_PATH" ] || [ ! -f "$ZIP_PATH" ]; then
     log_error "ZIP not found: $ZIP_INPUT"
+    log_info "Searched in: $WINDOWS_DOWNLOADS"
+    exit 1
   fi
   log_ok "Found: $ZIP_PATH"
 
 else
-  # Full path or relative path given
-  ZIP_PATH=$(realpath "$ZIP_INPUT" 2>/dev/null || echo "$ZIP_INPUT")
+  # Full path given
+  ZIP_PATH="$ZIP_INPUT"
   if [ ! -f "$ZIP_PATH" ]; then
     log_error "ZIP file not found: $ZIP_PATH"
+    exit 1
   fi
   log_ok "Using: $ZIP_PATH"
 fi
@@ -192,7 +198,7 @@ mkdir -p "$WORK_DIR"
 
 if command -v unzip &>/dev/null; then
   unzip -q "$ZIP_PATH" -d "$WORK_DIR" 2>/dev/null || {
-    log_warn "unzip failed — trying python fallback..."
+    log_error "unzip failed — trying python fallback..."
     python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
       "$ZIP_PATH" "$WORK_DIR"
   }
@@ -201,110 +207,68 @@ else
   python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
     "$ZIP_PATH" "$WORK_DIR" || {
     log_error "Extraction failed. Install unzip: sudo apt install unzip -y"
+    exit 1
   }
 fi
 
 # Flatten if zip extracted into a single sub-folder
 EXTRACT_ROOT="$WORK_DIR"
-SUBDIRS=($(find "$WORK_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null))
-ROOTFILES=($(find "$WORK_DIR" -maxdepth 1 -mindepth 1 -type f 2>/dev/null))
+SUBDIRS=$(find "$WORK_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+ROOTFILES=$(find "$WORK_DIR" -maxdepth 1 -mindepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
 
-if [ ${#SUBDIRS[@]} -eq 1 ] && [ ${#ROOTFILES[@]} -eq 0 ]; then
-  EXTRACT_ROOT="${SUBDIRS[0]}"
-  log_info "Flattened: content is inside $(basename "$EXTRACT_ROOT")/"
+if [ "$SUBDIRS" -eq 1 ] && [ "$ROOTFILES" -eq 0 ]; then
+  ONLY_DIR=$(find "$WORK_DIR" -maxdepth 1 -mindepth 1 -type d | head -1)
+  EXTRACT_ROOT="$ONLY_DIR"
+  log_info "Flattened: content is inside $(basename "$ONLY_DIR")/"
 fi
 
-FILE_COUNT=$(find "$EXTRACT_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')
+FILE_COUNT=$(find "$EXTRACT_ROOT" -type f | wc -l | tr -d ' ')
 log_ok "Extracted $FILE_COUNT files to $EXTRACT_ROOT"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PHASE 3 — Detect content type (FIXED)
+# PHASE 3 — Detect content type
 # ─────────────────────────────────────────────────────────────────────────────
 log_step "Phase 3 — Detecting content type"
 
-# Function to find Laravel source directory
-find_laravel_src() {
-  local base="$1"
-  
-  # Check for direct Laravel files
-  if [ -f "$base/artisan" ] || [ -d "$base/app/Http" ] || [ -f "$base/composer.json" ]; then
-    echo "$base"
-    return 0
-  fi
-  
-  # Check for backend subfolder
-  if [ -d "$base/backend" ] && ([ -f "$base/backend/artisan" ] || [ -d "$base/backend/app/Http" ]); then
-    echo "$base/backend"
-    return 0
-  fi
-  
-  # Check for laravel subfolder
-  if [ -d "$base/laravel" ] && ([ -f "$base/laravel/artisan" ] || [ -d "$base/laravel/app/Http" ]); then
-    echo "$base/laravel"
-    return 0
-  fi
-  
-  return 1
-}
-
-# Function to find React source directory
-find_react_src() {
-  local base="$1"
-  
-  # Check for direct React files
-  if [ -f "$base/package.json" ] && ([ -d "$base/src" ] || [ -f "$base/vite.config.js" ] || [ -f "$base/vite.config.ts" ]); then
-    echo "$base"
-    return 0
-  fi
-  
-  # Check for frontend subfolder
-  if [ -d "$base/frontend" ] && ([ -f "$base/frontend/package.json" ] || [ -d "$base/frontend/src" ]); then
-    echo "$base/frontend"
-    return 0
-  fi
-  
-  # Check for react subfolder
-  if [ -d "$base/react" ] && ([ -f "$base/react/package.json" ] || [ -d "$base/react/src" ]); then
-    echo "$base/react"
-    return 0
-  fi
-  
-  return 1
-}
-
 HAS_LARAVEL=false
 HAS_REACT=false
-LARAVEL_SRC=""
-REACT_SRC=""
+MOUNT_TYPE=""
 
-# Detect Laravel
-if LARAVEL_SRC=$(find_laravel_src "$EXTRACT_ROOT"); then
+# Laravel signals
+if [ -f "$EXTRACT_ROOT/artisan" ] || \
+   [ -d "$EXTRACT_ROOT/app/Http" ] || \
+   [ -d "$EXTRACT_ROOT/app/Models" ] || \
+   [ -f "$EXTRACT_ROOT/composer.json" ]; then
   HAS_LARAVEL=true
 fi
 
-# Detect React
-if REACT_SRC=$(find_react_src "$EXTRACT_ROOT"); then
+# React signals
+if [ -f "$EXTRACT_ROOT/package.json" ] || \
+   [ -d "$EXTRACT_ROOT/src" ] || \
+   [ -f "$EXTRACT_ROOT/vite.config.ts" ] || \
+   [ -f "$EXTRACT_ROOT/vite.config.js" ]; then
+  HAS_REACT=true
+fi
+
+# Also check if it's a frontend/ subfolder inside the zip
+if [ -d "$EXTRACT_ROOT/frontend" ] && [ -f "$EXTRACT_ROOT/artisan" ]; then
+  HAS_LARAVEL=true
   HAS_REACT=true
 fi
 
 # Flag overrides
 [ "$LARAVEL_ONLY" = true ] && HAS_REACT=false
-[ "$REACT_ONLY" = true ] && HAS_LARAVEL=false
+[ "$REACT_ONLY" = true ]   && HAS_LARAVEL=false
 
-MOUNT_TYPE=""
 if [ "$HAS_LARAVEL" = true ] && [ "$HAS_REACT" = true ]; then
   MOUNT_TYPE="fullstack"
   log_ok "Detected: FULLSTACK (Laravel + React)"
-  log_info "  Laravel source: $LARAVEL_SRC"
-  log_info "  React source: $REACT_SRC"
 elif [ "$HAS_LARAVEL" = true ]; then
   MOUNT_TYPE="laravel"
   log_ok "Detected: LARAVEL backend only"
-  log_info "  Source: $LARAVEL_SRC"
 elif [ "$HAS_REACT" = true ]; then
   MOUNT_TYPE="react"
   log_ok "Detected: REACT frontend only"
-  log_info "  Source: $REACT_SRC"
 else
   log_warn "Could not auto-detect content type."
   echo ""
@@ -315,11 +279,10 @@ else
   echo -e "  ${CYAN}4${NC}) Abort"
   read -rp "  Choice [1-4]: " choice
   case "$choice" in
-    1) MOUNT_TYPE="laravel"; HAS_LARAVEL=true; LARAVEL_SRC="$EXTRACT_ROOT" ;;
-    2) MOUNT_TYPE="react"; HAS_REACT=true; REACT_SRC="$EXTRACT_ROOT" ;;
-    3) MOUNT_TYPE="fullstack"; HAS_LARAVEL=true; HAS_REACT=true; 
-       LARAVEL_SRC="$EXTRACT_ROOT"; REACT_SRC="$EXTRACT_ROOT" ;;
-    *) log_error "Aborted." ;;
+    1) MOUNT_TYPE="laravel"; HAS_LARAVEL=true ;;
+    2) MOUNT_TYPE="react";   HAS_REACT=true ;;
+    3) MOUNT_TYPE="fullstack"; HAS_LARAVEL=true; HAS_REACT=true ;;
+    *) log_error "Aborted."; exit 1 ;;
   esac
 fi
 
@@ -337,18 +300,13 @@ show_preview() {
   local update_files=0
   local ignored_files=0
 
-  if [ ! -d "$SRC" ]; then
-    echo -e "  ${YELLOW}Warning: $LABEL source directory not found: $SRC${NC}"
-    return 1
-  fi
-
   while IFS= read -r f; do
     local rel="${f#$SRC/}"
     local dest_file="$DEST/$rel"
 
     # Skip junk
     if [[ "$rel" == .git/* || "$rel" == node_modules/* || \
-          "$rel" == vendor/* || "$rel" == .env || "$rel" == .env.* || \
+          "$rel" == vendor/* || "$rel" == .env || \
           "$rel" == storage/logs/* || "$rel" == bootstrap/cache/* ]]; then
       ignored_files=$((ignored_files+1))
       continue
@@ -359,7 +317,7 @@ show_preview() {
     else
       new_files=$((new_files+1))
     fi
-  done < <(find "$SRC" -type f 2>/dev/null | sort)
+  done < <(find "$SRC" -type f 2>/dev/null)
 
   echo -e "  ${BOLD}$LABEL${NC}"
   echo -e "    src  → ${CYAN}$SRC${NC}"
@@ -367,33 +325,24 @@ show_preview() {
   echo -e "    ${GREEN}+${NC} $new_files new files"
   echo -e "    ${YELLOW}~${NC} $update_files files to update"
   echo -e "    ${DIM}⊘${NC} $ignored_files protected/ignored"
-  
-  return 0
 }
 
-PREVIEW_OK=true
-
 if [ "$HAS_LARAVEL" = true ]; then
-  if [ -d "$LARAVEL_SRC" ]; then
-    show_preview "$LARAVEL_SRC" "$PROJECT_ROOT" "Laravel backend" || PREVIEW_OK=false
-  else
-    log_error "Laravel source directory not found: $LARAVEL_SRC"
-  fi
+  # Laravel source: could be root of zip, or a backend/ subfolder
+  LARAVEL_SRC="$EXTRACT_ROOT"
+  [ -d "$EXTRACT_ROOT/backend" ] && LARAVEL_SRC="$EXTRACT_ROOT/backend"
+  show_preview "$LARAVEL_SRC" "$PROJECT_ROOT" "Laravel backend"
 fi
 
 if [ "$HAS_REACT" = true ]; then
-  if [ -d "$REACT_SRC" ]; then
-    show_preview "$REACT_SRC" "$FRONTEND_ROOT" "React frontend" || PREVIEW_OK=false
-  else
-    log_error "React source directory not found: $REACT_SRC"
-  fi
+  # React source: src/ folder, or frontend/ subfolder, or root if it has package.json
+  REACT_SRC="$EXTRACT_ROOT"
+  [ -d "$EXTRACT_ROOT/frontend" ] && REACT_SRC="$EXTRACT_ROOT/frontend"
+  [ -d "$EXTRACT_ROOT/src" ]      && REACT_SRC="$EXTRACT_ROOT"
+  show_preview "$REACT_SRC" "$FRONTEND_ROOT" "React frontend"
 fi
 
 echo ""
-
-if [ "$PREVIEW_OK" = false ]; then
-  log_error "Preview failed — source directories missing"
-fi
 
 # Confirm prompt (skip if --force or --dry-run)
 if [ "$FORCE" = false ] && [ "$DRY_RUN" = false ]; then
@@ -405,27 +354,31 @@ if [ "$FORCE" = false ] && [ "$DRY_RUN" = false ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PHASE 5 — Smart File Merge (FIXED)
+# PHASE 5 — Smart File Merge
 # ─────────────────────────────────────────────────────────────────────────────
 log_step "Phase 5 — Merging files into project"
 
 # Files that must NEVER be overwritten from a zip
-PROTECTED_PATTERNS=(
+PROTECTED_FILES=(
   ".env"
   ".env.local"
   ".env.production"
-  ".env.staging"
-  "storage/logs/"
-  "bootstrap/cache/"
-  "node_modules/"
-  "vendor/"
-  ".git/"
+  "storage/logs"
+  "bootstrap/cache"
+  "node_modules"
+  "vendor"
+  ".git"
+  "composer.lock"     # only overwrite if explicitly new
+  "package-lock.json"
+  "yarn.lock"
+  "pnpm-lock.yaml"
+  "bun.lockb"
 )
 
 is_protected() {
   local rel_path="$1"
-  for pattern in "${PROTECTED_PATTERNS[@]}"; do
-    if [[ "$rel_path" == "$pattern" || "$rel_path" == "$pattern"* ]]; then
+  for p in "${PROTECTED_FILES[@]}"; do
+    if [[ "$rel_path" == "$p" || "$rel_path" == "$p/"* ]]; then
       return 0
     fi
   done
@@ -440,25 +393,17 @@ merge_into() {
   local skipped=0
   local protected=0
 
-  if [ ! -d "$SRC" ]; then
-    log_error "Cannot merge $LABEL: source directory not found: $SRC"
-  fi
-
   log_info "Merging $LABEL..."
-  log_info "  From: $SRC"
-  log_info "  To:   $DEST"
 
-  local files=()
   while IFS= read -r f; do
-    files+=("$f")
-  done < <(find "$SRC" -type f 2>/dev/null | sort)
-
-  for f in "${files[@]}"; do
     local rel="${f#$SRC/}"
+
+    # Skip .git always
+    [[ "$rel" == .git/* || "$rel" == .git ]] && continue
 
     # Check protected list
     if is_protected "$rel"; then
-      [ "$DRY_RUN" = true ] && log_dry "  would skip (protected): $rel"
+      log_info "  PROTECTED: $rel"
       protected=$((protected+1))
       continue
     fi
@@ -468,44 +413,40 @@ merge_into() {
     dest_dir=$(dirname "$dest_file")
 
     if [ "$DRY_RUN" = true ]; then
-      log_dry "  would copy: $rel"
+      log_dry "  would copy: $rel → $dest_file"
       copied=$((copied+1))
       continue
     fi
 
     mkdir -p "$dest_dir"
-    if cp "$f" "$dest_file" 2>/dev/null; then
-      copied=$((copied+1))
-    else
-      log_warn "  Failed to copy: $rel"
-      skipped=$((skipped+1))
-    fi
-  done
+    cp "$f" "$dest_file"
+    copied=$((copied+1))
 
-  log_ok "$LABEL: $copied files merged, $protected protected files skipped, $skipped failed"
-  return 0
+  done < <(find "$SRC" -type f 2>/dev/null | sort)
+
+  log_ok "$LABEL: $copied files merged, $protected protected files skipped"
 }
 
 # ── Merge Laravel ─────────────────────────────────────────────────────────────
 if [ "$HAS_LARAVEL" = true ]; then
+  LARAVEL_SRC="$EXTRACT_ROOT"
+  [ -d "$EXTRACT_ROOT/backend" ] && LARAVEL_SRC="$EXTRACT_ROOT/backend"
   merge_into "$LARAVEL_SRC" "$PROJECT_ROOT" "Laravel"
 
+  
+  
+
   # Run artisan migrate if migrations changed
-  if [ "$DRY_RUN" = false ] && [ -f "$PROJECT_ROOT/artisan" ] && [ -d "$LARAVEL_SRC/database/migrations" ]; then
+  if [ "$DRY_RUN" = false ] && [ -f "$PROJECT_ROOT/artisan" ]; then
     NEW_MIGRATIONS=$(find "$LARAVEL_SRC/database/migrations" -name "*.php" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$NEW_MIGRATIONS" -gt 0 ]; then
       log_info "$NEW_MIGRATIONS migration file(s) found — checking status..."
       if php "$PROJECT_ROOT/artisan" migrate:status 2>/dev/null | grep -q "Pending"; then
-        if [ "$FORCE" = true ]; then
-          log_info "Running migrations (--force)..."
-          php "$PROJECT_ROOT/artisan" migrate --force && log_ok "Migrations applied"
-        else
-          read -rp "  Pending migrations found. Run php artisan migrate? [y/N]: " run_migrate
-          case "$run_migrate" in
-            [yY]*) php "$PROJECT_ROOT/artisan" migrate --force && log_ok "Migrations applied" ;;
-            *)     log_warn "Migrations skipped — run: php artisan migrate" ;;
-          esac
-        fi
+        read -rp "  Pending migrations found. Run php artisan migrate? [y/N]: " run_migrate
+        case "$run_migrate" in
+          [yY]*) php "$PROJECT_ROOT/artisan" migrate --force && log_ok "Migrations applied" ;;
+          *)     log_warn "Migrations skipped — run: php artisan migrate" ;;
+        esac
       else
         log_info "No pending migrations"
       fi
@@ -515,22 +456,23 @@ fi
 
 # ── Merge React ───────────────────────────────────────────────────────────────
 if [ "$HAS_REACT" = true ]; then
+  REACT_SRC="$EXTRACT_ROOT"
+  [ -d "$EXTRACT_ROOT/frontend" ] && REACT_SRC="$EXTRACT_ROOT/frontend"
+
   merge_into "$REACT_SRC" "$FRONTEND_ROOT" "React"
 
-  # Auto-install npm dependencies if package.json exists
+  # Auto-install npm dependencies if package.json changed
   if [ "$DRY_RUN" = false ] && [ -f "$FRONTEND_ROOT/package.json" ]; then
     PKG_MANAGER="npm"
     [ -f "$FRONTEND_ROOT/pnpm-lock.yaml" ] && PKG_MANAGER="pnpm"
-    [ -f "$FRONTEND_ROOT/yarn.lock" ] && PKG_MANAGER="yarn"
-    [ -f "$FRONTEND_ROOT/bun.lockb" ] && PKG_MANAGER="bun"
+    [ -f "$FRONTEND_ROOT/yarn.lock" ]      && PKG_MANAGER="yarn"
+    [ -f "$FRONTEND_ROOT/bun.lockb" ]      && PKG_MANAGER="bun"
 
     if command -v "$PKG_MANAGER" &>/dev/null; then
       log_info "Running $PKG_MANAGER install..."
-      if (cd "$FRONTEND_ROOT" && $PKG_MANAGER install --silent 2>/dev/null); then
-        log_ok "$PKG_MANAGER install complete"
-      else
+      (cd "$FRONTEND_ROOT" && $PKG_MANAGER install --silent 2>/dev/null) && \
+        log_ok "$PKG_MANAGER install complete" || \
         log_warn "$PKG_MANAGER install had warnings — check manually"
-      fi
     else
       log_warn "$PKG_MANAGER not found — run install manually"
     fi
@@ -557,12 +499,9 @@ else
     LARAVEL_QA="$SCRIPT_DIR/laravel_qa_check.sh"
     if [ -f "$LARAVEL_QA" ]; then
       log_info "Running Laravel QA..."
-      if [ "$DRY_RUN" = false ]; then
-        bash "$LARAVEL_QA" "$PROJECT_ROOT" $QA_FLAGS 2>&1 | tee -a "$LOG_FILE" | grep -E "ERROR|WARN|OK|PASS|BLOCK|SUMMARY|━━━" || true
-        QA_LARAVEL_EXIT=${PIPESTATUS[0]}
-      else
-        log_dry "Would run: $LARAVEL_QA $PROJECT_ROOT $QA_FLAGS"
-      fi
+      bash "$LARAVEL_QA" "$PROJECT_ROOT" $QA_FLAGS 2>&1 | tee -a "$LOG_FILE" | \
+        grep -E "ERROR|WARN|OK|PASS|BLOCK|SUMMARY|━━━" || true
+      QA_LARAVEL_EXIT=${PIPESTATUS[0]}
       # Copy report to .qa-reports
       [ -f "$PROJECT_ROOT/laravel-qa-report.md" ] && \
         cp "$PROJECT_ROOT/laravel-qa-report.md" \
@@ -577,12 +516,9 @@ else
     REACT_QA="$SCRIPT_DIR/react_qa_check.sh"
     if [ -f "$REACT_QA" ]; then
       log_info "Running React QA..."
-      if [ "$DRY_RUN" = false ]; then
-        bash "$REACT_QA" "$FRONTEND_ROOT/src" $QA_FLAGS 2>&1 | tee -a "$LOG_FILE" | grep -E "ERROR|WARN|OK|PASS|BLOCK|SUMMARY|━━━" || true
-        QA_REACT_EXIT=${PIPESTATUS[0]}
-      else
-        log_dry "Would run: $REACT_QA $FRONTEND_ROOT/src $QA_FLAGS"
-      fi
+      bash "$REACT_QA" "$FRONTEND_ROOT/src" $QA_FLAGS 2>&1 | tee -a "$LOG_FILE" | \
+        grep -E "ERROR|WARN|OK|PASS|BLOCK|SUMMARY|━━━" || true
+      QA_REACT_EXIT=${PIPESTATUS[0]}
       # Copy report
       [ -f "$FRONTEND_ROOT/qa-report.md" ] && \
         cp "$FRONTEND_ROOT/qa-report.md" \
@@ -593,15 +529,15 @@ else
   fi
 
   # ── Evaluate QA results ───────────────────────────────────────────────────────
-  if [ "$DRY_RUN" = false ] && [ "$QA_LARAVEL_EXIT" -ne 0 ] || [ "$QA_REACT_EXIT" -ne 0 ]; then
+  if [ "$QA_LARAVEL_EXIT" -ne 0 ] || [ "$QA_REACT_EXIT" -ne 0 ]; then
     QA_PASSED=false
     echo ""
     echo -e "  ${RED}${BOLD}QA GATES FAILED${NC}"
     [ "$QA_LARAVEL_EXIT" -ne 0 ] && echo -e "  ${RED}✗${NC} Laravel QA: BLOCKED"
-    [ "$QA_REACT_EXIT" -ne 0 ] && echo -e "  ${RED}✗${NC} React QA:   BLOCKED"
+    [ "$QA_REACT_EXIT" -ne 0 ]   && echo -e "  ${RED}✗${NC} React QA:   BLOCKED"
     echo ""
 
-    if [ "$FORCE" = false ]; then
+    if [ "$FORCE" = false ] && [ "$DRY_RUN" = false ]; then
       echo -e "  ${YELLOW}QA errors found. Options:${NC}"
       echo -e "  ${CYAN}1${NC}) Continue anyway (commit despite errors)"
       echo -e "  ${CYAN}2${NC}) Run QA with --fix and retry"
@@ -615,18 +551,20 @@ else
         2)
           log_info "Re-running QA with --fix..."
           [ "$HAS_LARAVEL" = true ] && bash "$LARAVEL_QA" "$PROJECT_ROOT" --fix --report 2>/dev/null || true
-          [ "$HAS_REACT" = true ] && bash "$REACT_QA" "$FRONTEND_ROOT/src" --fix --report 2>/dev/null || true
+          [ "$HAS_REACT" = true ]   && bash "$REACT_QA" "$FRONTEND_ROOT/src" --fix --report 2>/dev/null || true
           QA_PASSED=true
           log_ok "QA --fix applied — review changes before next deploy"
           ;;
         *)
           log_error "Deploy aborted due to QA failures."
+          log_info "Fix the errors above, then re-run: ./scripts/deploy.sh $ZIP_NAME.zip"
+          exit 1
           ;;
       esac
     else
       [ "$FORCE" = true ] && log_warn "Continuing despite QA failures (--force)"
     fi
-  elif [ "$DRY_RUN" = false ]; then
+  else
     log_ok "All QA gates passed"
   fi
 fi
@@ -650,6 +588,7 @@ else
   if ! git rev-parse --git-dir > /dev/null 2>&1; then
     log_warn "Not a git repository. Initializing..."
     git init
+    git remote add origin "$(cat .git-remote-url 2>/dev/null || echo '')" 2>/dev/null || true
   fi
 
   # ── Detect current branch ──────────────────────────────────────────────────
@@ -673,6 +612,7 @@ else
 
   if [ "$STAGED" -eq 0 ]; then
     log_warn "Nothing to commit — all files already match the repository."
+    log_info "This usually means the zip contained no changes vs what's already committed."
     exit 0
   fi
 
@@ -693,11 +633,12 @@ else
       COMMIT_SCOPE="sprint${SPRINT_NUM}"
     fi
 
-    if [[ "$ZIP_NAME" =~ feat|feature ]]; then COMMIT_TYPE="feat"
-    elif [[ "$ZIP_NAME" =~ fix|bugfix|hotfix ]]; then COMMIT_TYPE="fix"
-    elif [[ "$ZIP_NAME" =~ refactor ]]; then COMMIT_TYPE="refactor"
-    elif [[ "$ZIP_NAME" =~ test ]]; then COMMIT_TYPE="test"
-    elif [[ "$ZIP_NAME" =~ docs ]]; then COMMIT_TYPE="docs"
+    if [[ "$ZIP_NAME" =~ feat|feature ]]; then    COMMIT_TYPE="feat"
+    elif [[ "$ZIP_NAME" =~ fix|bugfix|hotfix ]];  then COMMIT_TYPE="fix"
+    elif [[ "$ZIP_NAME" =~ refactor ]];            then COMMIT_TYPE="refactor"
+    elif [[ "$ZIP_NAME" =~ test ]];                then COMMIT_TYPE="test"
+    elif [[ "$ZIP_NAME" =~ docs ]];                then COMMIT_TYPE="docs"
+    elif [[ "$ZIP_NAME" =~ migration|db ]];        then COMMIT_TYPE="feat"
     fi
 
     # Build description from zip name
@@ -724,14 +665,17 @@ else
     fi
 
     # Add QA status footer
+    QA_FOOTER=""
     if [ "$SKIP_QA" = false ]; then
-      QA_FOOTER=""
       if [ "$QA_PASSED" = true ]; then
         QA_FOOTER="qa: all gates passed"
       else
         QA_FOOTER="qa: deployed with errors (review .qa-reports/)"
       fi
-      COMMIT_MSG="$(printf "%s\n\n%s\n\ndeployed-from: %s\ndeployed-at: %s" \
+    fi
+
+    if [ -n "$QA_FOOTER" ]; then
+      COMMIT_MSG="$(printf "%s\n\n%s\ndeployed-from: %s\ndeployed-at: %s" \
         "$COMMIT_MSG" "$QA_FOOTER" "$(basename "$ZIP_PATH")" "$(TS)")"
     fi
   fi
@@ -766,16 +710,18 @@ else
   else
     log_info "Pushing to $REMOTE/$TARGET_BRANCH..."
 
+    # Set upstream if new branch
     if git push "$REMOTE" "$TARGET_BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
       log_ok "Pushed to $REMOTE/$TARGET_BRANCH"
     else
+      # If upstream not set, set it
       log_info "Setting upstream and retrying..."
       git push --set-upstream "$REMOTE" "$TARGET_BRANCH" 2>&1 | tee -a "$LOG_FILE" && \
         log_ok "Pushed with upstream set: $REMOTE/$TARGET_BRANCH" || \
-        log_warn "Push failed — check your git remote and credentials"
+        log_error "Push failed — check your git remote and credentials"
     fi
 
-    # Sync: pull remote changes (rebase to keep history clean)
+    # ── Sync: pull remote changes (rebase to keep history clean) ──────────────
     log_info "Syncing: pulling remote changes..."
     git fetch "$REMOTE" 2>/dev/null || true
     BEHIND=$(git rev-list HEAD...$REMOTE/$TARGET_BRANCH --count 2>/dev/null || echo 0)
@@ -800,8 +746,6 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 echo -e "  ZIP:       ${CYAN}$(basename "$ZIP_PATH")${NC}"
 echo -e "  Type:      ${CYAN}$MOUNT_TYPE${NC}"
-[ -n "$LARAVEL_SRC" ] && echo -e "  Laravel:   ${CYAN}$LARAVEL_SRC${NC}"
-[ -n "$REACT_SRC" ] && echo -e "  React:     ${CYAN}$REACT_SRC${NC}"
 echo -e "  QA:        $([ "$SKIP_QA" = true ] && echo "${YELLOW}skipped${NC}" || ([ "$QA_PASSED" = true ] && echo "${GREEN}passed${NC}" || echo "${RED}errors found${NC}"))"
 echo -e "  Git:       $([ "$SKIP_GIT" = true ] && echo "${YELLOW}skipped${NC}" || [ "$DRY_RUN" = true ] && echo "${MAGENTA}dry run${NC}" || echo "${GREEN}pushed → $TARGET_BRANCH${NC}")"
 echo -e "  QA logs:   ${CYAN}$QA_REPORT_DIR${NC}"

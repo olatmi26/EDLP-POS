@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Services\ProductService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -17,11 +18,7 @@ class ProductController extends Controller
 
     /**
      * GET /api/products
-     * Returns paginated product list.
-     * When a branch_id is present on the request (injected by BranchScope middleware),
-     * we eager-load inventory scoped to that branch so stock levels appear on the
-     * Products Catalog page.  When branch_id is null (super-admin viewing all), we
-     * still load all inventory rows so the frontend can sum / display them.
+     * Returns paginated product list with branch-scoped inventory levels.
      */
     public function index(Request $request): JsonResponse
     {
@@ -41,10 +38,8 @@ class ProductController extends Controller
             ->when($request->supplier_id, fn ($q, $id) => $q->forSupplier((int) $id))
             ->when(
                 $request->has('active_only'),
-                fn ($q) => $request->boolean('active_only')
-                    ? $q->active()
-                    : $q,
-                fn ($q) => $q->active()   // default: only active products
+                fn ($q) => $request->boolean('active_only') ? $q->active() : $q,
+                fn ($q) => $q->active()
             )
             ->orderBy('name');
 
@@ -185,37 +180,42 @@ class ProductController extends Controller
         );
     }
 
-
+    /**
+     * PATCH /api/products/{product}/price
+     * Individual product price update with price history log.
+     */
     public function updatePrice(Request $request, Product $product): JsonResponse
     {
-        $validatedPrice = $request->validate([
+        $validated = $request->validate([
             'selling_price' => 'required|numeric|min:0',
-        ])['selling_price'];
-
-        if ($product->selling_price == $validatedPrice) {
-            return $this->success(['product' => $product], 'Price is already up to date.');
-        }
-
-        // Use DB facade directly only if not bound via import, otherwise use the injected database manager
-        $oldPrice = $product->selling_price;
-        $product->update(['selling_price' => $validatedPrice]);
-
-        DB::table('price_history')->insert([
-            'product_id'  => $product->id,
-            'old_price'   => $oldPrice,
-            'new_price'   => $validatedPrice,
-            'changed_by'  => $request->user()?->id ?? null,
-            'created_at'  => now(),
-            'effective_at' => now(),
-            'change_type' => 'manual',
-            'change_reason' => 'Price updated manually',
         ]);
 
-        // Refresh to reflect the updated price in data
-        $product->refresh();
+        $newPrice = (float) $validated['selling_price'];
+
+        if ($product->selling_price == $newPrice) {
+            return $this->success(new ProductResource($product), 'Price is already up to date.');
+        }
+
+        $oldPrice = $product->selling_price;
+
+        DB::transaction(function () use ($product, $oldPrice, $newPrice, $request) {
+            $product->update(['selling_price' => $newPrice]);
+
+            DB::table('price_history')->insert([
+                'product_id'    => $product->id,
+                'old_price'     => $oldPrice,
+                'new_price'     => $newPrice,
+                'changed_by'    => $request->user()?->id,
+                'effective_at'  => now(),
+                'change_type'   => 'manual',
+                'change_reason' => 'Price updated manually',
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ]);
+        });
 
         return $this->success(
-            ['product' => $product],
+            new ProductResource($product->fresh(['category', 'supplier'])),
             'Price updated successfully.'
         );
     }
@@ -229,10 +229,12 @@ class ProductController extends Controller
         $branchId = $request->branch_id;
 
         $products = Product::with(['category', 'supplier', 'inventory' => function ($q) use ($branchId) {
-            if ($branchId) $q->where('branch_id', $branchId);
+            if ($branchId) {
+                $q->where('branch_id', $branchId);
+            }
         }])->active()->orderBy('name')->get();
 
-        $columns = ['Name','SKU','Barcode','Category','Supplier','Cost Price','Selling Price','Unit','Reorder Level','Stock','Active'];
+        $columns = ['Name', 'SKU', 'Barcode', 'Category', 'Supplier', 'Cost Price', 'Selling Price', 'Unit', 'Reorder Level', 'Stock', 'Active'];
 
         return response()->streamDownload(function () use ($products, $columns) {
             $handle = fopen('php://output', 'w');
@@ -240,7 +242,7 @@ class ProductController extends Controller
             foreach ($products as $p) {
                 $stock = $p->inventory->sum('quantity');
                 fputcsv($handle, [
-                    $p->name, $p->sku, $p->barcode ?? '',
+                    $p->name, $p->sku ?? '', $p->barcode ?? '',
                     $p->category?->name ?? '', $p->supplier?->name ?? '',
                     $p->cost_price, $p->selling_price,
                     $p->unit ?? '', $p->reorder_level ?? '',
@@ -253,22 +255,25 @@ class ProductController extends Controller
 
     /**
      * POST /api/products/import/preview
-     * Returns first 10 rows of uploaded CSV for preview.
+     * Returns first 10 rows of uploaded CSV for preview before import.
      */
     public function importPreview(Request $request): JsonResponse
     {
         $request->validate(['file' => 'required|file|mimes:csv,txt']);
-        $path   = $request->file('file')->getRealPath();
-        $handle = fopen($path, 'r');
+
+        $path    = $request->file('file')->getRealPath();
+        $handle  = fopen($path, 'r');
         $headers = fgetcsv($handle);
         $rows    = [];
         $count   = 0;
+
         while (($row = fgetcsv($handle)) !== false && $count < 10) {
             $rows[] = $row;
             $count++;
         }
-        fclose($handle);
-        return $this->success(['headers' => $headers, 'rows' => $rows]);
-    }
 
+        fclose($handle);
+
+        return $this->success(['headers' => $headers, 'rows' => $rows, 'total_preview' => $count]);
+    }
 }

@@ -32,14 +32,12 @@ class AuthController extends Controller
             return $this->error('Your account has been deactivated. Contact your administrator.', 403);
         }
 
-        $user->update(['last_login_at' => now()]);
-
         $token = $user->createToken('pos-session', $this->abilitiesFor($user))->plainTextToken;
         $user->update(['last_login_at' => now(), 'is_online' => true]);
 
         return $this->success([
             'token' => $token,
-            'user'  => new UserResource($user),
+            'user'  => new UserResource($user->load('roles')),
         ], 'Login successful');
     }
 
@@ -56,35 +54,30 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check($request->pin, $user->pin)) {
-            return $this->error('Invalid PIN or phone number', 401);
+            return $this->error('Invalid PIN or staff ID', 401);
         }
 
         if (! $user->is_active) {
             return $this->error('Your account has been deactivated.', 403);
         }
 
-        $user->update(['last_login_at' => now()]);
-
         $token = $user->createToken('pos-pin-session', $this->abilitiesFor($user))->plainTextToken;
         $user->update(['last_login_at' => now(), 'is_online' => true]);
 
         return $this->success([
             'token' => $token,
-            'user'  => new UserResource($user),
+            'user'  => new UserResource($user->load('roles')),
         ], 'PIN login successful');
     }
 
     /**
      * DELETE /api/auth/logout
-     * Revoke the current Sanctum token.
+     * Revoke the current Sanctum token and mark user offline.
      */
     public function logout(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        // Revoke the exact token Sanctum matched for this request.
-        // `currentAccessToken()` can be unreliable in some test scenarios, so we
-        // resolve by bearer token string instead.
         $bearerToken = $request->bearerToken();
         if ($bearerToken) {
             $personalToken = PersonalAccessToken::findToken($bearerToken);
@@ -97,9 +90,11 @@ class AuthController extends Controller
             $user->tokens()->delete();
         }
 
-        // Clear cached guard state (helps in PHPUnit request sequences).
+        // Mark user offline
+        $user->update(['is_online' => false]);
+
+        // Clear cached guard state
         Auth::forgetGuards();
-        $user()->update(['is_online' => false]);
 
         return $this->success(null, 'Logged out successfully');
     }
@@ -130,7 +125,7 @@ class AuthController extends Controller
         $request->validate(['branch_id' => 'required|integer|exists:branches,id']);
 
         $user->update(['branch_id' => $request->branch_id]);
-        $user->load('branch');
+        $user->load('branch', 'roles');
 
         return $this->success(new UserResource($user), 'Branch switched successfully');
     }
