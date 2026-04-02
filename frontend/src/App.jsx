@@ -5,15 +5,18 @@ import { useAuthStore } from './stores/authStore'
 import { Spinner } from './ui/components/shared'
 
 // Layout
-import { AppLayout }       from './ui/layouts/AppLayout'
-import { SessionBootstrap } from './ui/SessionBootstrap'
+import { AppLayout }        from './ui/layouts/AppLayout'
+import { SessionBootstrap }  from './ui/SessionBootstrap'
 
 // Auth
-import { StaffLoginPage } from './ui/pages/StaffLoginPage'
+import { StaffLoginPage }   from './ui/pages/StaffLoginPage'
 
-// Pages
+// Core pages
 import { DashboardPage }      from './ui/pages/DashboardPage'
 import { ProductsPage }       from './ui/pages/ProductsPage'
+import { CategoriesPage }     from './ui/pages/CategoriesPage'
+import { BrandsPage }         from './ui/pages/BrandsPage'
+import { UnitsPage }          from './ui/pages/UnitsPage'
 import { InventoryPage }      from './ui/pages/InventoryPage'
 import { CustomersPage }      from './ui/pages/CustomersPage'
 import { SuppliersPage }      from './ui/pages/SuppliersPage'
@@ -39,7 +42,7 @@ function ComingSoon({ title, sprint }) {
 }
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry:1, refetchOnWindowFocus:false } },
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 })
 
 function Protected({ children }) {
@@ -65,39 +68,44 @@ export default function App() {
       <BrowserRouter>
         <SessionBootstrap />
         <Routes>
-          {/* ── Public Auth Routes ───────────────────────── */}
+          {/* ── Public Auth ──────────────────────────────────── */}
           <Route path="/login" element={<StaffLoginPage initialMode="email" />} />
           <Route path="/pin"   element={<StaffLoginPage initialMode="pin" />} />
 
-          {/* ── Protected App ───────────────────────────── */}
+          {/* ── Protected App ─────────────────────────────────── */}
           <Route path="/" element={<Protected><AppLayout /></Protected>}>
             <Route index element={<DashboardPage />} />
 
             {/* POS — Sprint 4 */}
-            <Route path="pos"   element={<ComingSoon title="POS Checkout"   sprint="Sprint 4" />} />
-            <Route path="sales" element={<ComingSoon title="Sales Reports"  sprint="Sprint 5" />} />
+            <Route path="pos"   element={<ComingSoon title="POS Checkout"  sprint="Sprint 4" />} />
+            <Route path="sales" element={<ComingSoon title="Sales Reports" sprint="Sprint 5" />} />
+
+            {/* Products module */}
+            <Route path="products"            element={<ProductsPage />} />
+            <Route path="products/categories" element={<CategoriesPage />} />
+            <Route path="products/brands"     element={<BrandsPage />} />
+            <Route path="products/units"      element={<UnitsPage />} />
 
             {/* Operations */}
-            <Route path="products"       element={<ProductsPage />} />
-            <Route path="inventory"      element={<InventoryPage />} />
-            <Route path="customers"      element={<CustomersPage />} />
-            <Route path="expenses"       element={<ExpensesPage />} />
-            <Route path="wholesale"      element={<WholesalePage />} />
-            <Route path="promotions"     element={<PromotionsPage />} />
+            <Route path="inventory"       element={<InventoryPage />} />
+            <Route path="customers"       element={<CustomersPage />} />
+            <Route path="expenses"        element={<ExpensesPage />} />
+            <Route path="wholesale"       element={<WholesalePage />} />
+            <Route path="promotions"      element={<PromotionsPage />} />
             <Route path="stock-movements" element={<StockMovementsPage />} />
 
             {/* Purchasing */}
-            <Route path="suppliers"       element={<SuppliersPage />} />
-            <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
+            <Route path="suppliers"        element={<SuppliersPage />} />
+            <Route path="purchase-orders"  element={<PurchaseOrdersPage />} />
 
             {/* Administration */}
-            <Route path="approvals"       element={<ApprovalsPage />} />
-            <Route path="users"           element={<IAMPage />} />
-            <Route path="settings/iam"    element={<IAMPage />} />
-            <Route path="branches"        element={<BranchesPage />} />
-            <Route path="accounting"      element={<AccountingPage />} />
-            <Route path="workflow-config" element={<WorkflowConfigPage />} />
-            <Route path="settings"        element={<ComingSoon title="System Settings" sprint="Sprint 7" />} />
+            <Route path="approvals"        element={<ApprovalsPage />} />
+            <Route path="users"            element={<IAMPage />} />
+            <Route path="settings/iam"     element={<IAMPage />} />
+            <Route path="branches"         element={<BranchesPage />} />
+            <Route path="accounting"       element={<AccountingPage />} />
+            <Route path="workflow-config"  element={<WorkflowConfigPage />} />
+            <Route path="settings"         element={<ComingSoon title="System Settings" sprint="Sprint 7" />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

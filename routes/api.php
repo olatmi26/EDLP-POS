@@ -4,6 +4,9 @@ use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\BrandController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\UnitController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\ProductBatchController;
@@ -269,5 +272,30 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
         Route::post('etax/retry/{branchId}',  [AccountingController::class, 'etaxRetry']);
         Route::get('etax/verify/{fdn}',       [AccountingController::class, 'etaxVerify']);
     });
+
+
+    // ── Categories ────────────────────────────────────────────────────────────
+    Route::get("categories", [CategoryController::class, "index"])->middleware("permission:products.view");
+    Route::post("categories", [CategoryController::class, "store"])->middleware("permission:products.create");
+    Route::get("categories/{category}", [CategoryController::class, "show"])->middleware("permission:products.view");
+    Route::put("categories/{category}", [CategoryController::class, "update"])->middleware("permission:products.edit");
+    Route::patch("categories/{category}", [CategoryController::class, "update"])->middleware("permission:products.edit");
+    Route::delete("categories/{category}", [CategoryController::class, "destroy"])->middleware("permission:products.delete");
+    Route::patch("categories/{category}/toggle", [CategoryController::class, "toggle"])->middleware("permission:products.edit");
+
+    // ── Brands ────────────────────────────────────────────────────────────────
+    Route::get("brands", [BrandController::class, "index"])->middleware("permission:products.view");
+    Route::post("brands", [BrandController::class, "store"])->middleware("permission:products.create");
+    Route::get("brands/{brand}", [BrandController::class, "show"])->middleware("permission:products.view");
+    Route::put("brands/{brand}", [BrandController::class, "update"])->middleware("permission:products.edit");
+    Route::patch("brands/{brand}", [BrandController::class, "update"])->middleware("permission:products.edit");
+    Route::delete("brands/{brand}", [BrandController::class, "destroy"])->middleware("permission:products.delete");
+
+    // ── Units ─────────────────────────────────────────────────────────────────
+    Route::get("units", [UnitController::class, "index"])->middleware("permission:products.view");
+    Route::post("units", [UnitController::class, "store"])->middleware("permission:products.create");
+    Route::put("units/{unit}", [UnitController::class, "update"])->middleware("permission:products.edit");
+    Route::patch("units/{unit}", [UnitController::class, "update"])->middleware("permission:products.edit");
+    Route::delete("units/{unit}", [UnitController::class, "destroy"])->middleware("permission:products.delete");
 
 }); // end auth:sanctum
