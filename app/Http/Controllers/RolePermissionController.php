@@ -39,6 +39,7 @@ class RolePermissionController extends Controller
                 $usersCount = DB::table('model_has_roles')
                     ->where('role_id', $r->id)
                     ->count();
+
                 return [
                     'id'                => $r->id,
                     'name'              => $r->name,
