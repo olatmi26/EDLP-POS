@@ -1,3 +1,4 @@
+import React, { useState, useMemo, useEffect } from 'react'
 /**
  * PromotionsPage — Promotions & Coupon Pricing Engine
  *
@@ -11,7 +12,7 @@
  * GET    /api/categories              — for scope selector
  * GET    /api/products                — for scope selector
  */
-import { useState, useMemo } from 'react'
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -93,7 +94,77 @@ function StatusBadge({ status }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export function PromotionsPage() {
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CouponsTab — shows active promotions and lets you generate coupons for each
+// ─────────────────────────────────────────────────────────────────────────────
+function CouponsTab({ promotions, loading, onGenerate }) {
+  const activePromos = (promotions ?? []).filter(p => p.status === 'active')
+  const allPromos    = promotions ?? []
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><div style={{ color: '#8A9AB5' }}>Loading…</div></div>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+        {[
+          { label: 'Active Promotions', value: activePromos.length, color: '#1A6E3A' },
+          { label: 'Total Promotions',  value: allPromos.length,    color: '#1A3FA6' },
+          { label: 'Coupon-Eligible',   value: activePromos.length, color: '#5B3FA6' },
+        ].map(s => (
+          <div key={s.label} style={{ background: '#fff', border: '1px solid #E5EBF2', borderRadius: 12, padding: '14px 18px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#8A9AB5', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{s.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {activePromos.length === 0 ? (
+        <div style={{ padding: 60, textAlign: 'center', color: '#8A9AB5', background: '#F8FAFC', borderRadius: 12, border: '1px dashed #D5DFE9' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>🎟️</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#3A4A5C', marginBottom: 6 }}>No active promotions</div>
+          <div style={{ fontSize: 13 }}>Activate a promotion first, then generate coupon codes for it here.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1C2B3A' }}>Active Promotions — Generate Coupons</div>
+          {activePromos.map(promo => {
+            const isPercent = promo.type === 'percentage_discount' || promo.type === 'flash_sale'
+            return (
+              <div key={promo.id} style={{ background: '#fff', border: '1px solid #E5EBF2', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: '#EAF5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🎟️</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: '#1C2B3A', fontSize: 14 }}>{promo.name}</div>
+                  <div style={{ fontSize: 12, color: '#8A9AB5', marginTop: 2 }}>
+                    {isPercent ? `${promo.value}% off` : `₦${promo.value} off`} ·
+                    Used {promo.used_count ?? 0}{promo.usage_limit ? ` / ${promo.usage_limit}` : ''} times
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: '#EAF5EE', color: '#1A6E3A', flexShrink: 0 }}>
+                  Active
+                </div>
+                <button onClick={() => onGenerate(promo)}
+                  style={{ padding: '8px 18px', background: '#0A1628', color: '#E8A020', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  🎟️ Generate Codes
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* All promotions reference */}
+      <div style={{ fontSize: 12, color: '#8A9AB5', padding: '12px 16px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #F0F4F8' }}>
+        <strong>Tip:</strong> Only <strong>Active</strong> promotions can have coupon codes generated.
+        To activate a promotion, go to the <strong>All Promotions</strong> tab, click Activate on an Approved promotion.
+      </div>
+    </div>
+  )
+}
+
+export function PromotionsPage({ view = 'list' }) {
+  // Auto-open the correct modal based on route/view prop
+  const [_autoOpened, setAutoOpened] = React.useState(false)
   const queryClient = useQueryClient()
   const isAdminLike = useAuthStore(s => s.isAdminLike())
 
@@ -106,6 +177,16 @@ export function PromotionsPage() {
   const [deleteTarget, setDelete] = useState(null)
   const [couponTarget, setCoupon] = useState(null)
   const [viewTarget, setView]     = useState(null)
+
+  // Auto-open modal based on route prop
+  // Tab for coupons sub-view
+  const [activeTab, setActiveTab] = useState(view === 'coupons' ? 'coupons' : 'promotions')
+
+  useEffect(() => {
+    if (view === 'create') { setCreate(true) }
+    if (view === 'coupons') { setActiveTab('coupons') }
+    if (view === 'list') { setActiveTab('promotions') }
+  }, [view])
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const promotionsQ = useQuery({
@@ -198,8 +279,7 @@ export function PromotionsPage() {
   const columns = [
     {
       key: 'name',
-      header: 'Promotion',
-      render: r => (
+      header: 'Promotion', cell: r => (
         <div>
           <div style={{ fontWeight: 600, color: '#1C2B3A', fontSize: 13 }}>{r.name}</div>
           <div style={{ fontSize: 11, color: '#8A9AB5', marginTop: 2 }}>
@@ -211,8 +291,7 @@ export function PromotionsPage() {
     },
     {
       key: 'value',
-      header: 'Discount',
-      render: r => (
+      header: 'Discount', cell: r => (
         <span style={{ fontWeight: 700, color: '#1A6E3A', fontSize: 14 }}>
           {r.type === 'percentage_discount' || r.type === 'flash_sale' ? `${r.value}%` : money(r.value)}
         </span>
@@ -220,13 +299,11 @@ export function PromotionsPage() {
     },
     {
       key: 'status',
-      header: 'Status',
-      render: r => <StatusBadge status={r.status} />,
+      header: 'Status', cell: r => <StatusBadge status={r.status} />,
     },
     {
       key: 'dates',
-      header: 'Date Range',
-      render: r => (
+      header: 'Date Range', cell: r => (
         <div style={{ fontSize: 12, color: '#6B7A8D' }}>
           {r.start_date ? format(new Date(r.start_date), 'd MMM') : 'Any'}
           {' → '}
@@ -236,8 +313,7 @@ export function PromotionsPage() {
     },
     {
       key: 'usage',
-      header: 'Usage',
-      render: r => (
+      header: 'Usage', cell: r => (
         <div style={{ fontSize: 12 }}>
           <span style={{ fontWeight: 700 }}>{r.used_count ?? 0}</span>
           {r.usage_limit ? <span style={{ color: '#8A9AB5' }}> / {r.usage_limit}</span> : <span style={{ color: '#8A9AB5' }}> (unlimited)</span>}
@@ -246,8 +322,7 @@ export function PromotionsPage() {
     },
     {
       key: 'actions',
-      header: '',
-      render: r => isAdminLike ? (
+      header: '', cell: r => isAdminLike ? (
         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
           {r.status === 'active' && (
             <Btn size="sm" variant="ghost" onClick={() => pauseMut.mutate(r.id)} disabled={pauseMut.isPending}>
@@ -348,6 +423,21 @@ export function PromotionsPage() {
         action={isAdminLike ? <Btn onClick={() => setCreate(true)}><Plus size={14} /> New Promotion</Btn> : undefined}
       />
 
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1.5px solid #E5EBF2' }}>
+        {[
+          { id: 'promotions', label: '📋 All Promotions' },
+          { id: 'coupons',    label: '🎟️ Coupons' },
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === t.id ? '2px solid #E8A020' : '2px solid transparent',
+              color: activeTab === t.id ? '#1C2B3A' : '#8A9AB5', marginBottom: -1.5 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14 }}>
         <StatCard label="Total Promotions"   value={meta?.total ?? '—'}  accent="#1A3FA6" />
@@ -355,6 +445,9 @@ export function PromotionsPage() {
         <StatCard label="Pending Approval"    value={pendingCount}         accent="#C45A00" />
         <StatCard label="Expired"             value={expiredCount}         accent="#8A9AB5" />
       </div>
+
+      {/* ── PROMOTIONS TAB ─────────────────────────────────────────────────── */}
+      {activeTab === 'promotions' && (<>
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -396,6 +489,17 @@ export function PromotionsPage() {
           pagination={meta ? { current: meta.current_page, last: meta.last_page, total: meta.total, onPage: setPage } : undefined}
         />
       </Card>
+
+      </>)} {/* end activeTab === 'promotions' */}
+
+      {/* ── COUPONS TAB ──────────────────────────────────────────────────────── */}
+      {activeTab === 'coupons' && (
+        <CouponsTab
+          promotions={promotions}
+          loading={promotionsQ.isLoading}
+          onGenerate={(promo) => setCoupon(promo)}
+        />
+      )}
 
       {/* Create Modal */}
       <Modal open={createModal} onClose={() => { setCreate(false); createForm.reset() }}

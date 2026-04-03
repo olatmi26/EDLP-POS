@@ -91,7 +91,9 @@ export default function App() {
             <Route path="customers"       element={<CustomersPage />} />
             <Route path="expenses"        element={<ExpensesPage />} />
             <Route path="wholesale"       element={<WholesalePage />} />
-            <Route path="promotions"      element={<PromotionsPage />} />
+            <Route path="promotions"          element={<PromotionsPage view="list" />} />
+            <Route path="promotions/create"   element={<PromotionsPage view="create" />} />
+            <Route path="promotions/coupons"  element={<PromotionsPage view="coupons" />} />
             <Route path="stock-movements" element={<StockMovementsPage />} />
 
             {/* Purchasing */}

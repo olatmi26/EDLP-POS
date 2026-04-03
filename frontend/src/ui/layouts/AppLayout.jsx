@@ -199,8 +199,8 @@ const FLYOUT_MENUS = {
     sections: [
       { items: [
         { icon: '📋', label: 'All Promotions',       sub: 'Active & draft list',      to: '/promotions' },
-        { icon: '➕', label: 'Create Promotion',     sub: 'New discount rule',        to: '/promotions' },
-        { icon: '🎟️', label: 'Coupons',              sub: 'Generate & track codes',   to: '/promotions' },
+        { icon: '➕', label: 'Create Promotion',     sub: 'New discount rule',        to: '/promotions/create' },
+        { icon: '🎟️', label: 'Coupons',              sub: 'Generate & track codes',   to: '/promotions/coupons' },
         { icon: '⏳', label: 'Pending Approval',     sub: 'Awaiting sign-off',        to: '/approvals' },
       ]},
     ],
@@ -516,8 +516,9 @@ export function AppLayout() {
   function isFlyoutSectionActive(flyoutKey) {
     const menu = FLYOUT_MENUS[flyoutKey]
     if (!menu) return false
+    // Use exact match only — prevents /products matching /products/categories etc.
     return menu.sections.some(sec =>
-      sec.items.some(item => item.to !== '/' && location.pathname.startsWith(item.to))
+      sec.items.some(item => item.to !== '/' && location.pathname === item.to)
     )
   }
 
@@ -662,13 +663,8 @@ export function AppLayout() {
                 <div className="edlp-flyout-section">{sec.label}</div>
               )}
               {sec.items.map((item, ii) => {
-                const isFirstInFirstSection = si === 0 && ii === 0
-                const isActive =
-                  item.to !== '/' && location.pathname === item.to
-                    ? true
-                    : isFirstInFirstSection && !sec.items.some(i => i.to !== '/' && location.pathname === i.to)
-                      ? false
-                      : false
+                // Only active when current route exactly matches this item
+                const isActive = item.to !== '/' && location.pathname === item.to
 
                 return (
                   <div

@@ -85,10 +85,17 @@ export function DashboardPage() {
     queryKey: ['branch-stats', user?.branch_id],
     queryFn:  async () => {
       if (!user?.branch_id) return null
-      const res = await api.get(`/branches/${user.branch_id}/stats`)
-      return res.data?.data
+      try {
+        const res = await api.get(`/branches/${user.branch_id}/stats`)
+        return res.data?.data
+      } catch (e) {
+        // 403 = user lacks branch stats permission — return empty gracefully
+        console.warn('Branch stats unavailable:', e?.response?.status)
+        return null
+      }
     },
     enabled: Boolean(user?.branch_id),
+    retry: false,
     refetchInterval: 30_000,
     staleTime: 20_000,
   })

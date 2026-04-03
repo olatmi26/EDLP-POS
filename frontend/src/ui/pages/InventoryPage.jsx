@@ -296,9 +296,9 @@ function ExpiryTab({ user, isAdminLike }) {
   const nearExpiry = nearExpiryQ.data ?? []
 
   const columns = [
-    { key: 'product',    header: 'Product',       render: r => <span style={{ fontWeight: 600, color: '#1C2B3A' }}>{r.product?.name ?? `#${r.product_id}`}</span> },
-    { key: 'batch_number', header: 'Batch No.',   render: r => <code style={{ fontSize: 11, background: '#F0F4F8', padding: '2px 6px', borderRadius: 4 }}>{r.batch_number}</code> },
-    { key: 'expiry_date', header: 'Expiry Date',  render: r => {
+    { key: 'product',    header: 'Product',       cell: r => <span style={{ fontWeight: 600, color: '#1C2B3A' }}>{r.product?.name ?? `#${r.product_id}`}</span> },
+    { key: 'batch_number', header: 'Batch No.',   cell: r => <code style={{ fontSize: 11, background: '#F0F4F8', padding: '2px 6px', borderRadius: 4 }}>{r.batch_number}</code> },
+    { key: 'expiry_date', header: 'Expiry Date',  cell: r => {
       const u = expiryUrgency(r.expiry_date)
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -309,14 +309,14 @@ function ExpiryTab({ user, isAdminLike }) {
         </div>
       )
     }},
-    { key: 'qty_remaining', header: 'Qty Left',   render: r => <span style={{ fontWeight: 700 }}>{r.quantity_remaining}</span> },
-    { key: 'cost',          header: 'Cost/Unit',  render: r => money(r.cost_per_unit) },
-    { key: 'status',        header: 'Status',     render: r => {
+    { key: 'qty_remaining', header: 'Qty Left',   cell: r => <span style={{ fontWeight: 700 }}>{r.quantity_remaining}</span> },
+    { key: 'cost',          header: 'Cost/Unit',  cell: r => money(r.cost_per_unit) },
+    { key: 'status',        header: 'Status',     cell: r => {
       const colors = { active: ['#EAF5EE', '#1A6E3A'], near_expiry: ['#FEF0E6', '#C45A00'], expired: ['#FDECEA', '#C0392B'], disposed: ['#F0F4F8', '#8A9AB5'] }
       const [bg, color] = colors[r.status] ?? ['#F0F4F8', '#8A9AB5']
       return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: bg, color }}>{r.status?.replace('_', ' ')}</span>
     }},
-    { key: 'actions',     header: '',           render: r => (
+    { key: 'actions',     header: '',           cell: r => (
       isAdminLike && ['active', 'near_expiry', 'expired'].includes(r.status) ? (
         <Btn size="sm" variant="danger" onClick={() => {
           setDisposalModal(r)
@@ -537,14 +537,14 @@ export function InventoryPage() {
   const branches = branchesQuery.data ?? []
 
   const columns = useMemo(() => [
-    { key: 'product', header: 'Product', render: r => (
+    { key: 'product', header: 'Product', cell: r => (
       <div>
         <div style={{ fontWeight: 600, color: '#1C2B3A', fontSize: 13 }}>{r.product?.name ?? `#${r.product_id}`}</div>
         <div style={{ fontSize: 11, color: '#8A9AB5' }}>{r.product?.sku ?? ''} · {r.product?.category?.name ?? '—'}</div>
       </div>
     )},
-    { key: 'branch',    header: 'Branch',      render: r => r.branch?.name ?? '—' },
-    { key: 'quantity',  header: 'Stock',        render: r => {
+    { key: 'branch',    header: 'Branch',      cell: r => r.branch?.name ?? '—' },
+    { key: 'quantity',  header: 'Stock',        cell: r => {
       const qty = r.quantity ?? 0
       const low = r.product?.reorder_level ?? 5
       const isOut = qty <= 0
@@ -556,9 +556,9 @@ export function InventoryPage() {
         </span>
       )
     }},
-    { key: 'reorder',   header: 'Reorder At',  render: r => r.product?.reorder_level ?? 5 },
-    { key: 'supplier',  header: 'Supplier',     render: r => r.product?.supplier?.name ?? '—' },
-    { key: 'actions',   header: '',             render: r => isAdminLike ? (
+    { key: 'reorder',   header: 'Reorder At',  cell: r => r.product?.reorder_level ?? 5 },
+    { key: 'supplier',  header: 'Supplier',     cell: r => r.product?.supplier?.name ?? '—' },
+    { key: 'actions',   header: '',             cell: r => isAdminLike ? (
       <Btn size="sm" variant="ghost" onClick={() => { setAdjustTarget(r); adjustForm.reset({ type: 'add', quantity: 0, notes: '' }) }}>
         Adjust
       </Btn>
@@ -566,11 +566,11 @@ export function InventoryPage() {
   ], [isAdminLike, adjustForm])
 
   const lowColumns = [
-    { key: 'product',  header: 'Product',      render: r => <span style={{ fontWeight: 600 }}>{r.product?.name}</span> },
-    { key: 'branch',   header: 'Branch',       render: r => r.branch?.name ?? '—' },
-    { key: 'stock',    header: 'Current Stock',render: r => <span style={{ fontWeight: 800, color: '#C0392B' }}>{r.quantity}</span> },
-    { key: 'reorder',  header: 'Reorder At',   render: r => r.product?.reorder_level ?? 5 },
-    { key: 'deficit',  header: 'Deficit',      render: r => <span style={{ color: '#C45A00', fontWeight: 700 }}>{Math.max(0, (r.product?.reorder_level ?? 5) - (r.quantity ?? 0))}</span> },
+    { key: 'product',  header: 'Product',      cell: r => <span style={{ fontWeight: 600 }}>{r.product?.name}</span> },
+    { key: 'branch',   header: 'Branch',       cell: r => r.branch?.name ?? '—' },
+    { key: 'stock',    header: 'Current Stock',cell: r => <span style={{ fontWeight: 800, color: '#C0392B' }}>{r.quantity}</span> },
+    { key: 'reorder',  header: 'Reorder At',   cell: r => r.product?.reorder_level ?? 5 },
+    { key: 'deficit',  header: 'Deficit',      cell: r => <span style={{ color: '#C45A00', fontWeight: 700 }}>{Math.max(0, (r.product?.reorder_level ?? 5) - (r.quantity ?? 0))}</span> },
   ]
 
   const lowRows = useMemo(() => (lowStockQuery.data ?? []), [lowStockQuery.data])
