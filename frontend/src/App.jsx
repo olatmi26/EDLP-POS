@@ -98,7 +98,8 @@ export default function App() {
 
             {/* Purchasing */}
             <Route path="suppliers"        element={<SuppliersPage />} />
-            <Route path="purchase-orders"  element={<PurchaseOrdersPage />} />
+            <Route path="purchase-orders"         element={<PurchaseOrdersPage />} />
+            <Route path="purchase-orders/create"  element={<PurchaseOrdersPage autoCreate />} />
 
             {/* Administration */}
             <Route path="approvals"        element={<ApprovalsPage />} />

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { z } from 'zod'
@@ -30,7 +30,7 @@ const poSchema = z.object({
   })).min(1, 'Add at least one line item'),
 })
 
-export function PurchaseOrdersPage() {
+export function PurchaseOrdersPage({ autoCreate = false }) {
   const queryClient = useQueryClient()
   const isAdminLike = useAuthStore((s) => s.isAdminLike())
 
@@ -42,6 +42,13 @@ export function PurchaseOrdersPage() {
   const [viewPO, setViewPO]             = useState(null)
   const [approvePO, setApprovePO]       = useState(null)
   const [receivePO, setReceivePO]       = useState(null)
+
+  // Auto-open create modal when navigated from flyout /purchase-orders/create
+  useEffect(() => {
+    if (autoCreate) {
+      setTimeout(() => setCreateOpen(true), 100)
+    }
+  }, [autoCreate])
 
   const posQuery = useQuery({
     queryKey: ['purchase-orders', { q: debouncedSearch, status: statusFilter, page }],
@@ -98,7 +105,12 @@ export function PurchaseOrdersPage() {
   const grandTotal = subtotal + taxAmount
 
   const createMutation = useMutation({
-    mutationFn: (d) => api.post('/purchase-orders', d),
+    mutationFn: (d) => {
+      // Coerce empty date string to null before sending
+      const payload = { ...d }
+      if (!payload.expected_delivery_date) payload.expected_delivery_date = null
+      return api.post('/purchase-orders', payload)
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey:['purchase-orders'] }); toast.success('Purchase order created'); setCreateOpen(false); reset() },
     onError: (e) => toast.error(e?.response?.data?.message ?? 'Failed to create PO'),
   })

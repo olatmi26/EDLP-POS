@@ -249,7 +249,7 @@ export function DataTable({
           <tbody>
             {rows.map((row, idx) => (
               <tr
-                key={rowKey ? rowKey(row) : idx}
+                key={rowKey ? (typeof rowKey === 'function' ? rowKey(row) : (row[rowKey] ?? idx)) : idx}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 style={{
                   borderBottom: '1px solid #F0F4F8',

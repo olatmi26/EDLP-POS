@@ -209,7 +209,7 @@ const FLYOUT_MENUS = {
     title: 'Purchase Orders',
     sections: [
       { items: [
-        { icon: '➕', label: 'New Purchase Order',   sub: 'Create PO',                to: '/purchase-orders' },
+        { icon: '➕', label: 'New Purchase Order',   sub: 'Create PO',                to: '/purchase-orders/create' },
         { icon: '📋', label: 'All Orders',           sub: 'PO list & history',        to: '/purchase-orders' },
         { icon: '⏳', label: 'Pending Approval',     sub: 'Awaiting sign-off',        to: '/approvals' },
         { icon: '✅', label: 'Received',             sub: 'Completed & received POs', to: '/purchase-orders' },
