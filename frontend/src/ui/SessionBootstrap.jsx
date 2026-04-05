@@ -78,7 +78,7 @@ export function SessionBootstrap() {
       window.addEventListener(event, resetTimer)
     }
 
-    resetTimer() // Start the timer at mount
+    resetTimer() 
 
     return () => {
       for (const event of events) {
