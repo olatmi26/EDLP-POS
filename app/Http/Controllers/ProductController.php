@@ -23,14 +23,22 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         $branchId = $request->branch_id; // set by BranchScope middleware
+        $user     = $request->user();
+
+        // Super-admins/admins with no explicit branch filter → load all branches
+        $loadAllBranches = ($user->isSuperAdmin() || $user->isAdmin() || $user->hasRole('ceo'))
+            && empty($request->input('branch_id'));
 
         $query = Product::with([
                 'category',
                 'supplier',
-                'inventory' => function ($q) use ($branchId) {
-                    if ($branchId) {
+                'brand',
+                'inventory' => function ($q) use ($branchId, $loadAllBranches) {
+                    // Admin without explicit branch filter: load all branches for full stock picture
+                    if ($branchId && !$loadAllBranches) {
                         $q->where('branch_id', $branchId);
                     }
+                    // else: no filter = load all inventory rows for this product
                 },
             ])
             ->when($request->search, fn ($q, $s) => $q->search($s))

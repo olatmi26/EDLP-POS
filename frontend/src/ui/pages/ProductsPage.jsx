@@ -292,6 +292,7 @@ export function ProductsPage() {
 
   const importRef  = useRef(null)
   const bulkUpRef  = useRef(null)
+  const [imageTarget, setImageTarget] = useState(null)  // for standalone image upload modal
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const productsQ = useQuery({
@@ -629,10 +630,32 @@ export function ProductsPage() {
         )
       },
     },
+    {
+      key: 'branch', header: 'Branch',
+      cell: p => {
+        // Show branch stocks for admin viewing all branches
+        const stocks = p.branch_stocks ?? []
+        if (stocks.length > 1) {
+          return (
+            <div style={{ fontSize: 11 }}>
+              {stocks.slice(0, 2).map(s => (
+                <div key={s.branch_id} style={{ color: '#6B7A8D' }}>Br#{s.branch_id}: {s.quantity}</div>
+              ))}
+              {stocks.length > 2 && <div style={{ color: '#8A9AB5' }}>+{stocks.length - 2} more</div>}
+            </div>
+          )
+        }
+        return <span style={{ fontSize: 12, color: '#6B7A8D' }}>{user?.branch?.name ?? '—'}</span>
+      },
+    },
     ...(isAdminLike ? [{
       key: 'actions', header: '',
       cell: p => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+          <button title="Upload image" onClick={e => { e.stopPropagation(); setImageTarget(p) }}
+            style={{ padding: 5, borderRadius: 6, border: '1px solid #E5EBF2', background: 'transparent', cursor: 'pointer', color: '#8A9AB5', display: 'flex', alignItems: 'center' }}>
+            <ImageIcon size={13} />
+          </button>
           <button title="Edit" onClick={e => { e.stopPropagation(); openEdit(p) }}
             style={{ padding: 5, borderRadius: 6, border: '1px solid #E5EBF2', background: 'transparent', cursor: 'pointer', color: '#1A3FA6', display: 'flex', alignItems: 'center' }}>
             <Pencil size={13} />
@@ -743,8 +766,29 @@ export function ProductsPage() {
               rowKey={p => p.id}
               loading={false}
               emptyMessage="No products match your filters. Try adjusting search or category."
-              pagination={meta ? { current: meta.current_page, last: meta.last_page, total: meta.total, onPage: setPage } : undefined}
             />
+            {/* Numbered clickable pagination */}
+            {meta && meta.last_page > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '14px 16px', borderTop: '1px solid #F0F4F8' }}>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={meta.current_page <= 1}
+                  style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #E5EBF2', background: '#fff', cursor: meta.current_page <= 1 ? 'not-allowed' : 'pointer', color: meta.current_page <= 1 ? '#D5DFE9' : '#3A4A5C', fontSize: 12, fontWeight: 600 }}>←</button>
+                {Array.from({ length: meta.last_page }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === meta.last_page || Math.abs(p - meta.current_page) <= 2)
+                  .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx-1] > 1) acc.push('…'); acc.push(p); return acc }, [])
+                  .map((p, i) => p === '…'
+                    ? <span key={'e'+i} style={{ padding: '5px 4px', color: '#8A9AB5', fontSize: 12 }}>…</span>
+                    : <button key={p} onClick={() => setPage(p)}
+                        style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          borderColor: p === meta.current_page ? '#E8A020' : '#E5EBF2',
+                          background: p === meta.current_page ? 'rgba(232,160,32,0.1)' : '#fff',
+                          color: p === meta.current_page ? '#C98516' : '#3A4A5C',
+                        }}>{p}</button>
+                  )}
+                <button onClick={() => setPage(p => Math.min(meta.last_page, p + 1))} disabled={meta.current_page >= meta.last_page}
+                  style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #E5EBF2', background: '#fff', cursor: meta.current_page >= meta.last_page ? 'not-allowed' : 'pointer', color: meta.current_page >= meta.last_page ? '#D5DFE9' : '#3A4A5C', fontSize: 12, fontWeight: 600 }}>→</button>
+                <span style={{ fontSize: 11, color: '#8A9AB5', marginLeft: 8 }}>{meta.total} products</span>
+              </div>
+            )}
           )}
         </Card>
       )}
@@ -1164,6 +1208,40 @@ export function ProductsPage() {
           </div>
         )}
       </Modal>
+
+      {/* ── Standalone Image Upload Modal ─────────────────────────────────── */}
+      {imageTarget && (
+        <Modal open={Boolean(imageTarget)} onClose={() => setImageTarget(null)}
+          title={`Upload Image — ${imageTarget?.name ?? ''}`} width={380}
+          footer={<Btn variant="ghost" onClick={() => setImageTarget(null)}>Close</Btn>}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, alignItems: 'center', padding: '8px 0' }}>
+            <div style={{ width: 80, height: 80, borderRadius: 16, overflow: 'hidden', border: '2px solid #E5EBF2', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F6F8FB' }}>
+              {imageTarget.thumbnail_url
+                ? <img src={imageTarget.thumbnail_url} alt={imageTarget.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <ImageIcon size={28} color="#D5DFE9" />
+              }
+            </div>
+            <div style={{ fontSize: 13, color: '#8A9AB5', textAlign: 'center' }}>JPEG / PNG / WebP · max 2 MB</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', background: '#0A1628', color: '#E8A020', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              <Upload size={15} /> Choose & Upload Image
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={async e => {
+                  if (!e.target.files?.[0]) return
+                  try {
+                    const fd = new FormData()
+                    fd.append('image', e.target.files[0])
+                    await api.post(\`/products/\${imageTarget.id}/image\`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+                    toast.success('Image uploaded')
+                    queryClient.invalidateQueries({ queryKey: ['products'] })
+                    setImageTarget(null)
+                  } catch { toast.error('Image upload failed') }
+                }}
+              />
+            </label>
+          </div>
+        </Modal>
+      )}
 
       {/* Delete confirm */}
       <ConfirmDialog

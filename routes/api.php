@@ -4,7 +4,12 @@ use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\BrandController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\ProductBatchController;
+use App\Http\Controllers\UnitController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PromotionController;
@@ -85,10 +90,77 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
         ->middleware('permission:products.delete');
 
     // ── Categories ────────────────────────────────────────────────────────────────
-    Route::get('categories', function (\Illuminate\Http\Request $request) {
-        $cats = \App\Models\Category::where('is_active', true)->orderBy('name')->get(['id','name','slug']);
-        return response()->json(['success' => true, 'data' => $cats]);
-    })->middleware('permission:products.view');
+    Route::get('categories',                          [CategoryController::class, 'index'])
+        ->middleware('permission:products.view');
+    Route::post('categories',                         [CategoryController::class, 'store'])
+        ->middleware('permission:products.create');
+    Route::get('categories/{category}',               [CategoryController::class, 'show'])
+        ->middleware('permission:products.view');
+    Route::put('categories/{category}',               [CategoryController::class, 'update'])
+        ->middleware('permission:products.edit');
+    Route::patch('categories/{category}',             [CategoryController::class, 'update'])
+        ->middleware('permission:products.edit');
+    Route::delete('categories/{category}',            [CategoryController::class, 'destroy'])
+        ->middleware('permission:products.delete');
+    Route::patch('categories/{category}/toggle',      [CategoryController::class, 'toggle'])
+        ->middleware('permission:products.edit');
+
+    // ── Brands ────────────────────────────────────────────────────────────────
+    Route::get('brands',                              [BrandController::class, 'index'])
+        ->middleware('permission:products.view');
+    Route::post('brands',                             [BrandController::class, 'store'])
+        ->middleware('permission:products.create');
+    Route::get('brands/{brand}',                      [BrandController::class, 'show'])
+        ->middleware('permission:products.view');
+    Route::put('brands/{brand}',                      [BrandController::class, 'update'])
+        ->middleware('permission:products.edit');
+    Route::patch('brands/{brand}',                    [BrandController::class, 'update'])
+        ->middleware('permission:products.edit');
+    Route::delete('brands/{brand}',                   [BrandController::class, 'destroy'])
+        ->middleware('permission:products.delete');
+
+    // ── Units ─────────────────────────────────────────────────────────────────
+    Route::get('units',                               [UnitController::class, 'index'])
+        ->middleware('permission:products.view');
+    Route::post('units',                              [UnitController::class, 'store'])
+        ->middleware('permission:products.create');
+    Route::get('units/{unit}',                        [UnitController::class, 'show'])
+        ->middleware('permission:products.view');
+    Route::put('units/{unit}',                        [UnitController::class, 'update'])
+        ->middleware('permission:products.edit');
+    Route::patch('units/{unit}',                      [UnitController::class, 'update'])
+        ->middleware('permission:products.edit');
+    Route::delete('units/{unit}',                     [UnitController::class, 'destroy'])
+        ->middleware('permission:products.delete');
+
+    // ── Stock Movements ───────────────────────────────────────────────────────
+    Route::get('stock-movements',                     [StockMovementController::class, 'index'])
+        ->middleware('permission:inventory.view');
+    Route::post('stock-movements',                    [StockMovementController::class, 'store'])
+        ->middleware('permission:inventory.adjust');
+    Route::get('stock-movements/{stockMovement}',     [StockMovementController::class, 'show'])
+        ->middleware('permission:inventory.view');
+    Route::get('stock-movements/reports/shrinkage',   [StockMovementController::class, 'shrinkageReport'])
+        ->middleware('permission:inventory.view');
+
+    // ── Product Batches (FEFO/Expiry) ─────────────────────────────────────────
+    Route::get('batches',                             [ProductBatchController::class, 'index'])
+        ->middleware('permission:inventory.view');
+    Route::post('batches',                            [ProductBatchController::class, 'store'])
+        ->middleware('permission:inventory.adjust');
+    Route::get('batches/near-expiry',                 [ProductBatchController::class, 'nearExpiry'])
+        ->middleware('permission:inventory.view');
+    Route::get('batches/product/{productId}/active',  [ProductBatchController::class, 'activeBatch'])
+        ->middleware('permission:inventory.view');
+    Route::get('batches/{productBatch}',              [ProductBatchController::class, 'show'])
+        ->middleware('permission:inventory.view');
+    Route::get('batches/disposals',                   [ProductBatchController::class, 'disposalIndex'])
+        ->middleware('permission:inventory.view');
+    Route::post('batches/disposals',                  [ProductBatchController::class, 'requestDisposal'])
+        ->middleware('permission:inventory.adjust');
+
+    // ── Approvals pending count (for badge) ───────────────────────────────────
+    Route::get('approvals/pending-count', [ApprovalController::class, 'pendingCount']);
 
     // ── Inventory ─────────────────────────────────────────────────────────────
     Route::get('inventory', [InventoryController::class, 'index'])
@@ -161,7 +233,6 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\BranchScope::class])->gr
     Route::prefix('approvals')->group(function () {
         Route::get('inbox',         [ApprovalController::class, 'inbox']);
         Route::get('history',       [ApprovalController::class, 'history']);
-        Route::get('pending-count', [ApprovalController::class, 'pendingCount']);
         Route::get('{approvalRequest}',          [ApprovalController::class, 'show']);
         Route::post('{approvalRequest}/decide',  [ApprovalController::class, 'decide']);
         Route::delete('{approvalRequest}/cancel',[ApprovalController::class, 'cancel']);

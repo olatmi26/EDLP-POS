@@ -196,8 +196,28 @@ export function WorkflowConfigPage() {
 
   const saveMutation = useMutation({
     mutationFn: (d) => {
-      const payload = { ...d, stages: d.stages.map((s,i) => ({ ...s, stage_order:i+1 })) }
-      return editWorkflow ? api.put(`/approval-workflows/${editWorkflow.id}`, payload) : api.post('/approval-workflows', payload)
+      // Ensure all required backend fields are present
+      const payload = {
+        name: d.name,
+        operation_type: d.operation_type,
+        is_active: d.is_active ?? true,
+        description: d.description ?? null,
+        requires_payment_processing: d.requires_payment_processing ?? false,
+        payment_account_code: d.payment_account_code ?? null,
+        credit_account_code: d.credit_account_code ?? 'AP-PAYABLE',
+        post_approval_viewer_roles: d.post_approval_viewer_roles ?? [],
+        stages: d.stages.map((s, i) => ({
+          stage_order: i + 1,
+          stage_name: s.stage_name,
+          approver_type: s.approver_type || 'role',
+          approver_role: s.approver_role || null,
+          approver_user_id: s.approver_user_id || null,
+          min_approvers: Number(s.min_approvers) || 1,
+          timeout_hours: Number(s.timeout_hours) || 48,
+          timeout_action: s.timeout_action || 'escalate',
+        })),
+      }
+      return editWorkflow ? api.put(\`/approval-workflows/\${editWorkflow.id}\`, payload) : api.post('/approval-workflows', payload)
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey:['approval-workflows'] }); toast.success(editWorkflow ? 'Workflow updated' : 'Workflow created'); setModalOpen(false) },
     onError: (e) => toast.error(e?.response?.data?.message ?? 'Failed'),
@@ -466,6 +486,13 @@ export function WorkflowConfigPage() {
                         </div>
                         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
                           <FormField label="Stage Name"><FormInput register={register(`stages.${idx}.stage_name`)} placeholder="e.g. Branch Manager Review" /></FormField>
+                          <FormField label="Approver Type">
+                            <FormSelect register={register(`stages.${idx}.approver_type`)}>
+                              <option value="role">By Role</option>
+                              <option value="any_of_role">Any of Role</option>
+                              <option value="user">Specific User</option>
+                            </FormSelect>
+                          </FormField>
                           <FormField label="Approver Role">
                             <FormSelect register={register(`stages.${idx}.approver_role`)}>
                               <option value="">—</option>
