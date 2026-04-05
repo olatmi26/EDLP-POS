@@ -178,7 +178,7 @@ export function WorkflowConfigPage() {
     stages:[{ stage_order:1,stage_name:'',approver_type:'role',approver_role:'branch-manager',min_approvers:1,timeout_hours:48,timeout_action:'escalate' }],
   }
 
-  const { register, handleSubmit, control, watch, reset, formState:{ errors, isSubmitting } } = useForm({ defaultValues })
+  const { register, handleSubmit, control, watch, reset, setValue, formState:{ errors, isSubmitting } } = useForm({ defaultValues })
   const { fields:stageFields, append:appendStage, remove:removeStage, move:moveStage } = useFieldArray({ control, name:'stages' })
 
   function openCreate() { setEditWorkflow(null); reset(defaultValues); setStep(0); setModalOpen(true) }
@@ -217,7 +217,7 @@ export function WorkflowConfigPage() {
           timeout_action: s.timeout_action || 'escalate',
         })),
       }
-      return editWorkflow ? api.put(\`/approval-workflows/\${editWorkflow.id}\`, payload) : api.post('/approval-workflows', payload)
+      return editWorkflow ? api.put(`/approval-workflows/${editWorkflow.id}`, payload) : api.post('/approval-workflows', payload)
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey:['approval-workflows'] }); toast.success(editWorkflow ? 'Workflow updated' : 'Workflow created'); setModalOpen(false) },
     onError: (e) => toast.error(e?.response?.data?.message ?? 'Failed'),
@@ -329,14 +329,29 @@ export function WorkflowConfigPage() {
                     return (
                       <tr key={r.id} style={{ borderBottom:'1px solid #F0F4F8' }}>
                         <td style={{ padding:'10px 14px' }}>
-                          <span style={{ fontSize:11,padding:'2px 8px',borderRadius:10,background:`${TYPE_COLORS[r.operation_type]??'#8A9AB5'}15`,color:TYPE_COLORS[r.operation_type]??'#8A9AB5',fontWeight:600 }}>
-                            {TYPE_LABELS[r.operation_type]??r.operation_type}
+                          <span style={{
+                            fontSize:11,
+                            padding:'2px 8px',
+                            borderRadius:10,
+                            background:`${TYPE_COLORS[r.operation_type] ?? '#8A9AB5'}15`,
+                            color:TYPE_COLORS[r.operation_type] ?? '#8A9AB5',
+                            fontWeight:600
+                          }}>
+                            {TYPE_LABELS[r.operation_type] ?? r.operation_type}
                           </span>
                         </td>
-                        <td style={{ padding:'10px 14px',color:'#3A4A5C' }}>{r.context_json?.name ?? r.context_json?.description ?? `#${r.operation_id}`}</td>
-                        <td style={{ padding:'10px 14px',color:'#6B7A8D',fontSize:12 }}>{r.requester?.name ?? '—'}</td>
-                        <td style={{ padding:'10px 14px' }}><Badge color={STATUS_C[r.status]??'default'}>{r.status}</Badge></td>
-                        <td style={{ padding:'10px 14px',color:'#8A9AB5',fontSize:11 }}>{r.created_at ? new Date(r.created_at).toLocaleDateString('en-NG') : '—'}</td>
+                        <td style={{ padding:'10px 14px',color:'#3A4A5C' }}>
+                          {r.context_json?.name ?? r.context_json?.description ?? `#${r.operation_id}`}
+                        </td>
+                        <td style={{ padding:'10px 14px',color:'#6B7A8D',fontSize:12 }}>
+                          {r.requester?.name ?? '—'}
+                        </td>
+                        <td style={{ padding:'10px 14px' }}>
+                          <Badge color={STATUS_C[r.status] ?? 'default'}>{r.status}</Badge>
+                        </td>
+                        <td style={{ padding:'10px 14px',color:'#8A9AB5',fontSize:11 }}>
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString('en-NG') : '—'}
+                        </td>
                       </tr>
                     )
                   })}
@@ -378,7 +393,7 @@ export function WorkflowConfigPage() {
               })}
             </div>
 
-            <form style={{ padding:'24px' }}>
+            <form style={{ padding:'24px' }} onSubmit={handleSubmit((d) => saveMutation.mutate(d))}>
               {/* Step 0 — Basic */}
               {step === 0 && (
                 <div style={{ display:'flex',flexDirection:'column',gap:16 }}>
@@ -442,10 +457,14 @@ export function WorkflowConfigPage() {
                           transition:'all 0.15s' }}>
                           <input type="checkbox" style={{ display:'none' }} checked={checked}
                             onChange={(e) => {
-                              const next = e.target.checked ? [...viewerRoles,role] : viewerRoles.filter(r=>r!==role)
-                              // use react-hook-form setValue
-                              const current = watch()
-                              reset({ ...current, post_approval_viewer_roles: next })
+                              let next
+                              if (e.target.checked) {
+                                // Prevent duplicates
+                                next = Array.from(new Set([...viewerRoles,role]))
+                              } else {
+                                next = viewerRoles.filter(r=>r!==role)
+                              }
+                              setValue('post_approval_viewer_roles', next, { shouldDirty: true, shouldTouch: true })
                             }}
                           />
                           {checked ? '✓ ':''}{role}
@@ -522,9 +541,9 @@ export function WorkflowConfigPage() {
                 {step === 0 ? 'Cancel' : '← Back'}
               </Btn>
               {step < FORM_STEPS.length - 1 ? (
-                <Btn onClick={() => setStep(s=>s+1)}>Continue →</Btn>
+                <Btn onClick={() => setStep(s=>s+1)} disabled={!Object.values(stepValid)[step]}>Continue →</Btn>
               ) : (
-                <Btn onClick={handleSubmit((d) => saveMutation.mutate(d))} disabled={isSubmitting || saveMutation.isPending}>
+                <Btn type="submit" disabled={isSubmitting || saveMutation.isPending}>
                   {saveMutation.isPending ? <><Spinner size={12}/> Saving…</> : editWorkflow ? 'Save Changes' : 'Create Workflow'}
                 </Btn>
               )}

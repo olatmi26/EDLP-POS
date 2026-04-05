@@ -11,6 +11,7 @@ use App\Services\ProductService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ProductController extends Controller
 {
@@ -19,29 +20,40 @@ class ProductController extends Controller
     /**
      * GET /api/products
      * Returns paginated product list with branch-scoped inventory levels.
+     *
+     * Admin/Super-Admin/CEO with no explicit branch_id → load inventory for ALL branches.
+     * Branch-scoped users → inventory for their branch only (enforced by BranchScope).
      */
     public function index(Request $request): JsonResponse
     {
         $branchId = $request->branch_id; // set by BranchScope middleware
         $user     = $request->user();
 
-        // Super-admins/admins with no explicit branch filter → load all branches
+        // Admins with no explicit branch filter → load all branches' stock
         $loadAllBranches = ($user->isSuperAdmin() || $user->isAdmin() || $user->hasRole('ceo'))
             && empty($request->input('branch_id'));
 
-        $query = Product::with([
-                'category',
-                'supplier',
-                'brand',
-                'inventory' => function ($q) use ($branchId, $loadAllBranches) {
-                    // Admin without explicit branch filter: load all branches for full stock picture
-                    if ($branchId && !$loadAllBranches) {
-                        $q->where('branch_id', $branchId);
-                    }
-                    // else: no filter = load all inventory rows for this product
-                },
-            ])
-            ->when($request->search, fn ($q, $s) => $q->search($s))
+        // Only eager-load brand if the brands table/column exists
+        $brandTableExists = Schema::hasTable('brands')
+            && Schema::hasColumn('products', 'brand_id');
+
+        $with = [
+            'category:id,name',
+            'supplier:id,name',
+            'inventory' => function ($q) use ($branchId, $loadAllBranches) {
+                if (!$loadAllBranches && $branchId) {
+                    $q->where('branch_id', $branchId);
+                }
+                // no filter = all branches inventory (for admin aggregate view)
+            },
+        ];
+
+        if ($brandTableExists) {
+            $with[] = 'brand:id,name';
+        }
+
+        $query = Product::with($with)
+            ->when($request->search,      fn ($q, $s)  => $q->search($s))
             ->when($request->category_id, fn ($q, $id) => $q->forCategory((int) $id))
             ->when($request->supplier_id, fn ($q, $id) => $q->forSupplier((int) $id))
             ->when(
@@ -69,7 +81,7 @@ class ProductController extends Controller
         $branchId = $request->branch_id;
 
         $products = Product::with([
-            'category',
+            'category:id,name',
             'inventory' => fn ($q) => $q->where('branch_id', $branchId),
         ])
             ->active()
@@ -85,25 +97,20 @@ class ProductController extends Controller
      */
     public function store(StoreProductRequest $request): JsonResponse
     {
-        $product = $this->productService->create($request->validated());
-
-        return $this->created(
-            new ProductResource($product->load('category', 'supplier')),
-            'Product created'
-        );
+        $product = $this->productService->create($request->validated(), $request->user());
+        return $this->created(new ProductResource($product->load('category', 'supplier')), 'Product created');
     }
 
     /**
      * GET /api/products/{product}
      */
-    public function show(Product $product): JsonResponse
+    public function show(Request $request, Product $product): JsonResponse
     {
         $product->load([
             'category',
             'supplier',
-            'media',
             'inventory',
-            'priceHistory' => fn ($q) => $q->latest()->limit(10),
+            'priceHistory',
         ]);
 
         return $this->success(new ProductResource($product));
@@ -115,11 +122,7 @@ class ProductController extends Controller
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
     {
         $product = $this->productService->update($product, $request->validated(), $request->user());
-
-        return $this->success(
-            new ProductResource($product->load('category', 'supplier')),
-            'Product updated'
-        );
+        return $this->success(new ProductResource($product->load('category', 'supplier')), 'Product updated');
     }
 
     /**
@@ -135,8 +138,25 @@ class ProductController extends Controller
         }
 
         $product->delete();
-
         return $this->success(null, 'Product deleted');
+    }
+
+    /**
+     * POST /api/products/{product}/image
+     * Upload product image via Spatie Media Library.
+     */
+    public function uploadImage(Request $request, Product $product): JsonResponse
+    {
+        $request->validate([
+            'image' => 'required|file|mimes:jpeg,png,webp|max:2048',
+        ]);
+
+        $product->clearMediaCollection('images');
+        $product->addMediaFromRequest('image')->toMediaCollection('images');
+
+        return $this->success([
+            'thumbnail_url' => $product->getFirstMediaUrl('images'),
+        ], 'Image uploaded');
     }
 
     /**
@@ -144,15 +164,71 @@ class ProductController extends Controller
      */
     public function bulkPriceUpdate(BulkPriceUpdateRequest $request): JsonResponse
     {
-        $updated = $this->productService->bulkPriceUpdate(
-            $request->validated(),
-            $request->user()
-        );
+        $result = $this->productService->bulkPriceUpdate($request->validated(), $request->user());
+        return $this->success($result, "Updated {$result['updated']} product(s)");
+    }
 
-        return $this->success(
-            ['updated_count' => $updated],
-            "Updated {$updated} product prices"
-        );
+    /**
+     * PATCH /api/products/{product}/price
+     * Individual product price update with history log.
+     */
+    public function updatePrice(Request $request, Product $product): JsonResponse
+    {
+        $data = $request->validate([
+            'selling_price' => 'required|numeric|min:0',
+            'cost_price'    => 'nullable|numeric|min:0',
+            'reason'        => 'nullable|string|max:255',
+        ]);
+
+        $oldPrice = $product->selling_price;
+        $product->update($data);
+
+        PriceHistory::create([
+            'product_id'       => $product->id,
+            'old_price'        => $oldPrice,
+            'new_price'        => $product->selling_price,
+            'change_type'      => 'manual',
+            'price_change_pct' => $oldPrice > 0
+                ? round((($product->selling_price - $oldPrice) / $oldPrice) * 100, 2)
+                : 0,
+            'changed_by'       => $request->user()->id,
+            'effective_at'     => now(),
+        ]);
+
+        return $this->success(new ProductResource($product), 'Price updated');
+    }
+
+    /**
+     * GET /api/products/export
+     */
+    public function export(Request $request): JsonResponse|\Illuminate\Http\Response
+    {
+        $branchId = $request->branch_id;
+
+        $products = Product::with(['category:id,name', 'supplier:id,name', 'inventory' => function ($q) use ($branchId) {
+            if ($branchId) {
+                $q->where('branch_id', $branchId);
+            }
+        }])
+            ->when($request->category_id, fn ($q, $id) => $q->forCategory((int) $id))
+            ->when($request->price_min, fn ($q, $min) => $q->where('selling_price', '>=', $min))
+            ->when($request->price_max, fn ($q, $max) => $q->where('selling_price', '<=', $max))
+            ->active()
+            ->orderBy('name')
+            ->get();
+
+        $headers = ['name', 'sku', 'barcode', 'category', 'supplier', 'cost_price', 'selling_price', 'unit', 'reorder_level', 'is_active', 'stock'];
+        $rows    = $products->map(fn ($p) => [
+            $p->name, $p->sku, $p->barcode ?? '',
+            $p->category?->name ?? '', $p->supplier?->name ?? '',
+            $p->cost_price, $p->selling_price, $p->unit ?? '',
+            $p->reorder_level ?? '', $p->is_active ? 'Yes' : 'No',
+            $p->inventory->sum('quantity'),
+        ]);
+
+        $csv  = collect([$headers])->concat($rows)->map(fn ($r) => implode(',', array_map(fn ($v) => '"' . str_replace('"', '""', $v) . '"', $r)))->implode("\n");
+
+        return response($csv, 200, ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="edlp-products.csv"']);
     }
 
     /**
@@ -162,126 +238,20 @@ class ProductController extends Controller
     {
         $request->validate(['file' => 'required|file|mimes:csv,txt|max:5120']);
 
-        $result = $this->productService->importFromCsv(
-            $request->file('file'),
-            $request->user()
-        );
+        $result = $this->productService->importFromCsv($request->file('file'), $request->user());
 
-        return $this->success(
-            $result,
-            "Import complete: {$result['imported']} products, {$result['skipped']} skipped"
-        );
-    }
-
-    /**
-     * POST /api/products/{product}/image
-     */
-    public function uploadImage(Request $request, Product $product): JsonResponse
-    {
-        $request->validate(['image' => 'required|image|max:2048']);
-
-        $product->addMediaFromRequest('image')->toMediaCollection('images');
-
-        return $this->success(
-            ['thumbnail_url' => $product->getFirstMediaUrl('images')],
-            'Image uploaded'
-        );
-    }
-
-    /**
-     * PATCH /api/products/{product}/price
-     * Individual product price update with price history log.
-     */
-    public function updatePrice(Request $request, Product $product): JsonResponse
-    {
-        $validated = $request->validate([
-            'selling_price' => 'required|numeric|min:0',
-        ]);
-
-        $newPrice = (float) $validated['selling_price'];
-
-        if ($product->selling_price == $newPrice) {
-            return $this->success(new ProductResource($product), 'Price is already up to date.');
-        }
-
-        $oldPrice = $product->selling_price;
-
-        DB::transaction(function () use ($product, $oldPrice, $newPrice, $request) {
-            $product->update(['selling_price' => $newPrice]);
-
-            DB::table('price_history')->insert([
-                'product_id'    => $product->id,
-                'old_price'     => $oldPrice,
-                'new_price'     => $newPrice,
-                'changed_by'    => $request->user()?->id,
-                'effective_at'  => now(),
-                'change_type'   => 'manual',
-                'change_reason' => 'Price updated manually',
-                'created_at'    => now(),
-                'updated_at'    => now(),
-            ]);
-        });
-
-        return $this->success(
-            new ProductResource($product->fresh(['category', 'supplier'])),
-            'Price updated successfully.'
-        );
-    }
-
-    /**
-     * GET /api/products/export
-     * Export full product catalogue as CSV download.
-     */
-    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
-    {
-        $branchId = $request->branch_id;
-
-        $products = Product::with(['category', 'supplier', 'inventory' => function ($q) use ($branchId) {
-            if ($branchId) {
-                $q->where('branch_id', $branchId);
-            }
-        }])->active()->orderBy('name')->get();
-
-        $columns = ['Name', 'SKU', 'Barcode', 'Category', 'Supplier', 'Cost Price', 'Selling Price', 'Unit', 'Reorder Level', 'Stock', 'Active'];
-
-        return response()->streamDownload(function () use ($products, $columns) {
-            $handle = fopen('php://output', 'w');
-            fputcsv($handle, $columns);
-            foreach ($products as $p) {
-                $stock = $p->inventory->sum('quantity');
-                fputcsv($handle, [
-                    $p->name, $p->sku ?? '', $p->barcode ?? '',
-                    $p->category?->name ?? '', $p->supplier?->name ?? '',
-                    $p->cost_price, $p->selling_price,
-                    $p->unit ?? '', $p->reorder_level ?? '',
-                    $stock, $p->is_active ? 'Yes' : 'No',
-                ]);
-            }
-            fclose($handle);
-        }, 'edlp-products-' . now()->format('Y-m-d') . '.csv', ['Content-Type' => 'text/csv']);
+        return $this->success($result, "Import complete: {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
     }
 
     /**
      * POST /api/products/import/preview
-     * Returns first 10 rows of uploaded CSV for preview before import.
      */
     public function importPreview(Request $request): JsonResponse
     {
-        $request->validate(['file' => 'required|file|mimes:csv,txt']);
+        $request->validate(['file' => 'required|file|mimes:csv,txt|max:5120']);
 
-        $path    = $request->file('file')->getRealPath();
-        $handle  = fopen($path, 'r');
-        $headers = fgetcsv($handle);
-        $rows    = [];
-        $count   = 0;
+        $preview = $this->productService->previewImport($request->file('file'));
 
-        while (($row = fgetcsv($handle)) !== false && $count < 10) {
-            $rows[] = $row;
-            $count++;
-        }
-
-        fclose($handle);
-
-        return $this->success(['headers' => $headers, 'rows' => $rows, 'total_preview' => $count]);
+        return $this->success($preview);
     }
 }

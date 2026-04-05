@@ -458,7 +458,7 @@ export function AppLayout() {
   // ── Queries ────────────────────────────────────────────────────────────────
   const branchesQ = useQuery({
     queryKey: ['branches', 'all'],
-    enabled:  Boolean(isAdminLike),
+    enabled:  true,  // always load branches for branch switcher
     queryFn:  async () => {
       const res = await api.get('/branches', { params: { all: true } })
       return res.data?.data ?? []
@@ -479,7 +479,9 @@ export function AppLayout() {
   })
 
   const switchBranchMut = useMutation({
-    mutationFn: branchId => api.post('/auth/switch-branch', { branch_id: branchId }),
+    mutationFn: branchId => api.post('/auth/switch-branch', {
+      branch_id: branchId || null,  // null = all branches (admin only)
+    }),
     onSuccess: async res => {
       if (res.data?.data) setUser(res.data.data)
       await queryClient.invalidateQueries({ queryKey: ['me'] })
@@ -553,12 +555,14 @@ export function AppLayout() {
 
     // flyout type
     const isOpen   = openFlyout === item.flyoutKey
-    const isActive = isFlyoutSectionActive(item.flyoutKey)
+    // Only highlight the sidebar nav item when its flyout is actively OPEN
+    // Removes false double-active when flyout items share the same route
+    const isActive = isOpen
 
     return (
       <div
         key={item.flyoutKey + idx}
-        className={'edlp-nl' + (isOpen || isActive ? ' flyout-active' : '')}
+        className={'edlp-nl' + (isActive ? ' flyout-active' : '')}
         onClick={() => handleFlyoutToggle(item.flyoutKey)}
         role="button"
         tabIndex={0}
@@ -664,7 +668,11 @@ export function AppLayout() {
               )}
               {sec.items.map((item, ii) => {
                 // Only active when current route exactly matches this item
-                const isActive = item.to !== '/' && location.pathname === item.to
+                // AND no other item in the same section also matches (prevents all-active bug)
+                const routeMatchCount = sec.items.filter(i => i.to !== '/' && i.to === location.pathname).length
+                const isActive = item.to !== '/'
+                  && location.pathname === item.to
+                  && routeMatchCount === 1  // only highlight if unique in this section
 
                 return (
                   <div
@@ -762,9 +770,9 @@ export function AppLayout() {
                         disabled={branchesQ.isLoading || switchBranchMut.isPending}
                         style={{ flex: 1, fontSize: 12, border: '1px solid #D5DFE9', borderRadius: 6, padding: '5px 8px', color: 'var(--edlp-text)', outline: 'none', cursor: 'pointer', background: '#fff' }}
                       >
-                        <option value="" disabled>Select branch…</option>
+                        <option value="">All Branches (No Filter)</option>
                         {(branchesQ.data ?? []).map(b => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
+                          <option key={b.id} value={b.id}>{b.is_head_office ? '🏢 ' : '📍 '}{b.name}</option>
                         ))}
                       </select>
                       {switchBranchMut.isPending && (

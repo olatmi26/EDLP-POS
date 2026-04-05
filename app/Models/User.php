@@ -121,7 +121,6 @@ class User extends Authenticatable implements HasMedia
         if ($this->isSuperAdmin() || $this->isAdmin()) {
             return true;
         }
-
         return $this->branch_id === $branchId;
     }
 

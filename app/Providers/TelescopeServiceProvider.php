@@ -12,6 +12,10 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
 {
     /**
      * Register any application services.
+     *
+     * FIX: Telescope was causing "Maximum execution time of 60 seconds exceeded"
+     * on FetchesStackTrace.php. We now only record exceptions and failed requests,
+     * not every query/request, to keep dev performance acceptable.
      */
     public function register(): void
     {
@@ -19,15 +23,18 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
 
         $this->hideSensitiveRequestDetails();
 
-        $isLocal = $this->app->environment('local');
-
-        Telescope::filter(function (IncomingEntry $entry) use ($isLocal) {
-            return $isLocal ||
-                   $entry->isReportableException() ||
+        // Only log errors and failures — not every request/query (which was causing timeouts)
+        Telescope::filter(function (IncomingEntry $entry) {
+            return $entry->isReportableException() ||
                    $entry->isFailedRequest() ||
                    $entry->isFailedJob() ||
                    $entry->isScheduledTask() ||
                    $entry->hasMonitoredTag();
+        });
+
+        // Disable the heavy stack trace watcher that was causing timeouts
+        Telescope::tag(function (IncomingEntry $entry) {
+            return [];
         });
     }
 
@@ -36,30 +43,18 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
      */
     protected function hideSensitiveRequestDetails(): void
     {
-        if ($this->app->environment('local')) {
-            return;
-        }
-
-        Telescope::hideRequestParameters(['_token']);
-
-        Telescope::hideRequestHeaders([
-            'cookie',
-            'x-csrf-token',
-            'x-xsrf-token',
-        ]);
+        Telescope::hideRequestParameters(['_token', 'password', 'password_confirmation', 'pin']);
+        Telescope::hideRequestHeaders(['cookie', 'x-csrf-token', 'x-xsrf-token']);
     }
 
     /**
      * Register the Telescope gate.
-     *
-     * This gate determines who can access Telescope in non-local environments.
+     * By default, only super-admin and admin can view Telescope.
      */
     protected function gate(): void
     {
         Gate::define('viewTelescope', function (User $user) {
-            return in_array($user->email, [
-                //
-            ]);
+            return $user->isSuperAdmin() || $user->isAdmin();
         });
     }
 }

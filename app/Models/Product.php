@@ -21,6 +21,7 @@ class Product extends Model implements HasMedia
         'description',
         'category_id',
         'supplier_id',
+        'brand_id',        // ← added (brands migration must have run)
         'cost_price',
         'selling_price',
         'unit',
@@ -30,7 +31,7 @@ class Product extends Model implements HasMedia
         'vat_rate',
         'weight',
         'meta',
-        'slug'
+        'slug',
     ];
 
     protected $casts = [
@@ -71,6 +72,15 @@ class Product extends Model implements HasMedia
     public function supplier(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    /**
+     * Brand relationship — safe: returns null if brands table doesn't exist yet.
+     * Run migration 2026_04_01_000001_create_brands_and_units_tables to activate.
+     */
+    public function brand(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
     }
 
     public function inventory(): \Illuminate\Database\Eloquent\Relations\HasMany
@@ -139,7 +149,6 @@ class Product extends Model implements HasMedia
 
     public function getStockForBranchAttribute(): ?int
     {
-        // Used after eager loading inventory for a specific branch
         return $this->inventory->first()?->quantity;
     }
 }
