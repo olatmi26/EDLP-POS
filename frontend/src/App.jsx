@@ -10,6 +10,7 @@ import { SessionBootstrap }  from './ui/SessionBootstrap'
 
 // Auth
 import { StaffLoginPage }   from './ui/pages/StaffLoginPage'
+import { GlassyLoginPage } from './ui/pages/GlossyLoginPage'
 
 // Core pages
 import { DashboardPage }      from './ui/pages/DashboardPage'
@@ -71,6 +72,7 @@ export default function App() {
           {/* ── Public Auth ──────────────────────────────────── */}
           <Route path="/login" element={<StaffLoginPage initialMode="email" />} />
           <Route path="/pin"   element={<StaffLoginPage initialMode="pin" />} />
+          <Route path="/glossy-login" element={<GlassyLoginPage initialMode="email" />} />
 
           {/* ── Protected App ─────────────────────────────────── */}
           <Route path="/" element={<Protected><AppLayout /></Protected>}>
